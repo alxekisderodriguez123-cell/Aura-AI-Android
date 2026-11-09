@@ -49,17 +49,14 @@ fun AuraScreen(
     onVoiceButtonClick: () -> Unit,
     onSendChatMessage: (String) -> Unit
 ) {
-    var showingChat by remember {
-        mutableStateOf(false)
-    }
+    var showingChat by remember { mutableStateOf(false) }
 
     if (showingChat) {
         AuraChatScreen(
             messages = chatMessages,
             onSendMessage = onSendChatMessage,
-            onBack = {
-                showingChat = false
-            }
+            onVoiceButtonClick = onVoiceButtonClick,
+            onBack = { showingChat = false }
         )
     } else {
         AuraVoiceScreen(
@@ -67,9 +64,7 @@ fun AuraScreen(
             transcript = transcript,
             message = message,
             onVoiceButtonClick = onVoiceButtonClick,
-            onChatClick = {
-                showingChat = true
-            }
+            onChatClick = { showingChat = true }
         )
     }
 }
@@ -82,8 +77,7 @@ private fun AuraVoiceScreen(
     onVoiceButtonClick: () -> Unit,
     onChatClick: () -> Unit
 ) {
-    val isListening =
-        voiceState == AuraVoiceState.LISTENING
+    val isListening = voiceState == AuraVoiceState.LISTENING
 
     val accent = when (voiceState) {
         AuraVoiceState.IDLE -> Color(0xFF728BFF)
@@ -101,7 +95,7 @@ private fun AuraVoiceScreen(
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
-                        colors = listOf(
+                        listOf(
                             Color(0xFF111B35),
                             Color(0xFF090E20),
                             Color(0xFF070A16)
@@ -115,7 +109,7 @@ private fun AuraVoiceScreen(
                     .align(Alignment.TopCenter)
                     .background(
                         Brush.radialGradient(
-                            colors = listOf(
+                            listOf(
                                 accent.copy(alpha = 0.12f),
                                 Color.Transparent
                             )
@@ -126,14 +120,9 @@ private fun AuraVoiceScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(
-                        horizontal = 25.dp,
-                        vertical = 24.dp
-                    ),
+                    .padding(horizontal = 25.dp, vertical = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-
-                // Header
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -149,7 +138,6 @@ private fun AuraVoiceScreen(
                             fontWeight = FontWeight.Light,
                             letterSpacing = 7.sp
                         )
-
                         Text(
                             text = "PERSONAL AI ASSISTANT",
                             color = Color(0xFF8293B7),
@@ -158,11 +146,9 @@ private fun AuraVoiceScreen(
                         )
                     }
 
-                    Column(
-                        horizontalAlignment = Alignment.End
-                    ) {
+                    Column(horizontalAlignment = Alignment.End) {
                         Surface(
-                            color = Color.White.copy(alpha = 0.055f),
+                            color = Color.White.copy(alpha = 0.07f),
                             shape = CircleShape
                         ) {
                             Row(
@@ -175,16 +161,9 @@ private fun AuraVoiceScreen(
                                 Box(
                                     modifier = Modifier
                                         .size(6.dp)
-                                        .background(
-                                            accent,
-                                            CircleShape
-                                        )
+                                        .background(accent, CircleShape)
                                 )
-
-                                Spacer(
-                                    modifier = Modifier.size(7.dp)
-                                )
-
+                                Spacer(Modifier.size(7.dp))
                                 Text(
                                     text = when (voiceState) {
                                         AuraVoiceState.IDLE -> "READY"
@@ -199,32 +178,27 @@ private fun AuraVoiceScreen(
                             }
                         }
 
-                        TextButton(
-                            onClick = onChatClick
-                        ) {
+                        TextButton(onClick = onChatClick) {
                             Text(
                                 text = "CHAT  ↗",
-                                color = Color(0xFF9DBBFF),
-                                fontSize = 10.sp,
+                                color = Color(0xFFB6CAFF),
+                                fontSize = 11.sp,
                                 letterSpacing = 1.2.sp
                             )
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.weight(0.65f))
+                Spacer(Modifier.weight(0.65f))
 
-                AuraOrb(
-                    state = voiceState
-                )
+                AuraOrb(state = voiceState)
 
-                Spacer(modifier = Modifier.height(15.dp))
+                Spacer(Modifier.height(15.dp))
 
                 AnimatedContent(
                     targetState = voiceState,
                     transitionSpec = {
-                        fadeIn(tween(350)) togetherWith
-                            fadeOut(tween(200))
+                        fadeIn(tween(350)) togetherWith fadeOut(tween(200))
                     },
                     label = "aura_status_transition"
                 ) { state ->
@@ -242,27 +216,25 @@ private fun AuraVoiceScreen(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(9.dp))
+                Spacer(Modifier.height(9.dp))
 
                 Text(
                     text = message,
-                    color = Color(0xFF8F9FBD),
-                    fontSize = 12.sp,
+                    color = Color(0xFF9EACC8),
+                    fontSize = 13.sp,
                     textAlign = TextAlign.Center,
-                    lineHeight = 19.sp
+                    lineHeight = 20.sp
                 )
 
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(Modifier.height(20.dp))
 
                 if (transcript.isNotBlank()) {
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
-                        color = Color.White.copy(alpha = 0.055f),
+                        color = Color.White.copy(alpha = 0.07f),
                         shape = RoundedCornerShape(23.dp)
                     ) {
-                        Column(
-                            modifier = Modifier.padding(17.dp)
-                        ) {
+                        Column(Modifier.padding(17.dp)) {
                             Text(
                                 text = "TE HE ESCUCHADO",
                                 color = Color(0xFF91B9E8),
@@ -270,11 +242,7 @@ private fun AuraVoiceScreen(
                                 fontWeight = FontWeight.SemiBold,
                                 letterSpacing = 2.sp
                             )
-
-                            Spacer(
-                                modifier = Modifier.height(8.dp)
-                            )
-
+                            Spacer(Modifier.height(8.dp))
                             Text(
                                 text = transcript,
                                 color = Color(0xFFEAF7FF),
@@ -283,11 +251,10 @@ private fun AuraVoiceScreen(
                             )
                         }
                     }
-
-                    Spacer(modifier = Modifier.height(17.dp))
+                    Spacer(Modifier.height(17.dp))
                 }
 
-                Spacer(modifier = Modifier.weight(0.25f))
+                Spacer(Modifier.weight(0.25f))
 
                 Button(
                     onClick = onVoiceButtonClick,
@@ -312,11 +279,11 @@ private fun AuraVoiceScreen(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(23.dp))
+                Spacer(Modifier.height(23.dp))
 
                 Text(
                     text = "AURA · INTELLIGENCE IN MOTION",
-                    color = Color(0xFF566482),
+                    color = Color(0xFF647493),
                     fontSize = 8.sp,
                     letterSpacing = 2.sp
                 )
