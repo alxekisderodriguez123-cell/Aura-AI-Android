@@ -2,7 +2,6 @@
 package com.aura.ai.ui
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -24,17 +23,21 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.aura.ai.chat.ChatMessage
 import com.aura.ai.voice.AuraVoiceState
 
 @Composable
@@ -42,9 +45,45 @@ fun AuraScreen(
     voiceState: AuraVoiceState,
     transcript: String,
     message: String,
-    onVoiceButtonClick: () -> Unit
+    chatMessages: List<ChatMessage>,
+    onVoiceButtonClick: () -> Unit,
+    onSendChatMessage: (String) -> Unit
 ) {
-    val isListening = voiceState == AuraVoiceState.LISTENING
+    var showingChat by remember {
+        mutableStateOf(false)
+    }
+
+    if (showingChat) {
+        AuraChatScreen(
+            messages = chatMessages,
+            onSendMessage = onSendChatMessage,
+            onBack = {
+                showingChat = false
+            }
+        )
+    } else {
+        AuraVoiceScreen(
+            voiceState = voiceState,
+            transcript = transcript,
+            message = message,
+            onVoiceButtonClick = onVoiceButtonClick,
+            onChatClick = {
+                showingChat = true
+            }
+        )
+    }
+}
+
+@Composable
+private fun AuraVoiceScreen(
+    voiceState: AuraVoiceState,
+    transcript: String,
+    message: String,
+    onVoiceButtonClick: () -> Unit,
+    onChatClick: () -> Unit
+) {
+    val isListening =
+        voiceState == AuraVoiceState.LISTENING
 
     val accent = when (voiceState) {
         AuraVoiceState.IDLE -> Color(0xFF728BFF)
@@ -119,39 +158,54 @@ fun AuraScreen(
                         )
                     }
 
-                    Surface(
-                        color = Color.White.copy(alpha = 0.055f),
-                        shape = CircleShape
+                    Column(
+                        horizontalAlignment = Alignment.End
                     ) {
-                        Row(
-                            modifier = Modifier.padding(
-                                horizontal = 12.dp,
-                                vertical = 8.dp
-                            ),
-                            verticalAlignment = Alignment.CenterVertically
+                        Surface(
+                            color = Color.White.copy(alpha = 0.055f),
+                            shape = CircleShape
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(6.dp)
-                                    .background(
-                                        accent,
-                                        CircleShape
-                                    )
-                            )
+                            Row(
+                                modifier = Modifier.padding(
+                                    horizontal = 12.dp,
+                                    vertical = 8.dp
+                                ),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .background(
+                                            accent,
+                                            CircleShape
+                                        )
+                                )
 
-                            Spacer(
-                                modifier = Modifier.size(7.dp)
-                            )
+                                Spacer(
+                                    modifier = Modifier.size(7.dp)
+                                )
 
+                                Text(
+                                    text = when (voiceState) {
+                                        AuraVoiceState.IDLE -> "READY"
+                                        AuraVoiceState.LISTENING -> "LISTENING"
+                                        AuraVoiceState.PROCESSING -> "THINKING"
+                                        AuraVoiceState.SPEAKING -> "SPEAKING"
+                                    },
+                                    color = Color(0xFFC6D7F4),
+                                    fontSize = 8.sp,
+                                    letterSpacing = 1.2.sp
+                                )
+                            }
+                        }
+
+                        TextButton(
+                            onClick = onChatClick
+                        ) {
                             Text(
-                                text = when (voiceState) {
-                                    AuraVoiceState.IDLE -> "READY"
-                                    AuraVoiceState.LISTENING -> "LISTENING"
-                                    AuraVoiceState.PROCESSING -> "THINKING"
-                                    AuraVoiceState.SPEAKING -> "SPEAKING"
-                                },
-                                color = Color(0xFFC6D7F4),
-                                fontSize = 8.sp,
+                                text = "CHAT  ↗",
+                                color = Color(0xFF9DBBFF),
+                                fontSize = 10.sp,
                                 letterSpacing = 1.2.sp
                             )
                         }
@@ -160,7 +214,6 @@ fun AuraScreen(
 
                 Spacer(modifier = Modifier.weight(0.65f))
 
-                // Main orb
                 AuraOrb(
                     state = voiceState
                 )
@@ -177,17 +230,10 @@ fun AuraScreen(
                 ) { state ->
                     Text(
                         text = when (state) {
-                            AuraVoiceState.IDLE ->
-                                "Estoy aquí"
-
-                            AuraVoiceState.LISTENING ->
-                                "Te estoy escuchando"
-
-                            AuraVoiceState.PROCESSING ->
-                                "Procesando"
-
-                            AuraVoiceState.SPEAKING ->
-                                "Estoy hablando"
+                            AuraVoiceState.IDLE -> "Estoy aquí"
+                            AuraVoiceState.LISTENING -> "Te estoy escuchando"
+                            AuraVoiceState.PROCESSING -> "Procesando"
+                            AuraVoiceState.SPEAKING -> "Estoy hablando"
                         },
                         color = Color(0xFFF0F6FF),
                         fontSize = 23.sp,
@@ -208,7 +254,6 @@ fun AuraScreen(
 
                 Spacer(modifier = Modifier.height(20.dp))
 
-                // Recognized speech
                 if (transcript.isNotBlank()) {
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
@@ -244,7 +289,6 @@ fun AuraScreen(
 
                 Spacer(modifier = Modifier.weight(0.25f))
 
-                // Voice action
                 Button(
                     onClick = onVoiceButtonClick,
                     modifier = Modifier
