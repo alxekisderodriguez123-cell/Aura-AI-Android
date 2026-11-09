@@ -1,3 +1,4 @@
+
 package com.aura.ai
 
 import android.Manifest
@@ -7,9 +8,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
+import com.aura.ai.chat.AuraChatDatabase
+import com.aura.ai.chat.ChatMessage
 import com.aura.ai.ui.AuraScreen
 import com.aura.ai.voice.AuraVoiceController
 import com.aura.ai.voice.AuraVoiceState
@@ -28,6 +32,10 @@ class MainActivity : ComponentActivity() {
 
     private var voiceController: AuraVoiceController? = null
 
+    private lateinit var chatDatabase: AuraChatDatabase
+
+    private val chatMessages = mutableStateListOf<ChatMessage>()
+
     private val microphonePermission =
         registerForActivityResult(
             ActivityResultContracts.RequestPermission()
@@ -43,6 +51,12 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        chatDatabase = AuraChatDatabase(applicationContext)
+
+        chatMessages.addAll(
+            chatDatabase.getMessages()
+        )
 
         voiceController = AuraVoiceController(
             context = applicationContext,
@@ -65,11 +79,41 @@ class MainActivity : ComponentActivity() {
                 voiceState = voiceState,
                 transcript = transcript,
                 message = voiceMessage,
+                chatMessages = chatMessages,
                 onVoiceButtonClick = {
                     handleVoiceButton()
+                },
+                onSendChatMessage = { text ->
+                    sendChatMessage(text)
                 }
             )
         }
+    }
+
+    private fun sendChatMessage(rawText: String) {
+        val text = rawText.trim()
+
+        if (text.isEmpty()) return
+
+        val userMessage = ChatMessage(
+            text = text,
+            isUser = true
+        )
+
+        val savedUserMessage =
+            chatDatabase.insertMessage(userMessage)
+
+        chatMessages.add(savedUserMessage)
+
+        val response = ChatMessage(
+            text = "Recibí tu mensaje y lo guardé en este dispositivo. Mi motor de inteligencia y las funciones de conversación todavía están en desarrollo.",
+            isUser = false
+        )
+
+        val savedResponse =
+            chatDatabase.insertMessage(response)
+
+        chatMessages.add(savedResponse)
     }
 
     private fun handleVoiceButton() {
@@ -96,6 +140,10 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         voiceController?.release()
         voiceController = null
+
+        if (::chatDatabase.isInitialized) {
+            chatDatabase.close()
+        }
 
         super.onDestroy()
     }
