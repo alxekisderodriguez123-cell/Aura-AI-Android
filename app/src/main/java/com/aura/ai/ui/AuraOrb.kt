@@ -616,4 +616,24 @@ fun AuraOrb(
                     primaryGlow(state).copy(
                         alpha = 0.12f * listeningIntensity
                     ),
-                    
+                    Color.Transparent
+                ),
+                center = center,
+                radius = radius * 1.25f
+            ),
+            radius = radius * 1.25f,
+            center = center
+        )
+    }
+}
+
+private fun primaryGlow(
+    state: AuraVoiceState
+): Color {
+    return when (state) {
+        AuraVoiceState.IDLE -> Color(0xFFB36BFF)
+        AuraVoiceState.LISTENING -> Color(0xFF36EFFF)
+        AuraVoiceState.PROCESSING -> Color(0xFFB77AFF)
+        AuraVoiceState.SPEAKING -> Color(0xFFFF70B8)
+    }
+}
