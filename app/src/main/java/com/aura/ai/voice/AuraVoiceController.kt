@@ -17,7 +17,8 @@ class AuraVoiceController(
     context: Context,
     private val onStateChanged: (AuraVoiceState) -> Unit,
     private val onTranscriptChanged: (String) -> Unit,
-    private val onMessageChanged: (String) -> Unit
+    private val onMessageChanged: (String) -> Unit,
+    private val onFinalTranscript: (String) -> Unit
 ) {
 
     private val appContext = context.applicationContext
@@ -120,7 +121,7 @@ class AuraVoiceController(
 
         recognizer = try {
             SpeechRecognizer.createSpeechRecognizer(appContext)
-        } catch (exception: Exception) {
+        } catch (_: Exception) {
             onMessageChanged(
                 "No se pudo iniciar el servicio de reconocimiento"
             )
@@ -200,7 +201,8 @@ class AuraVoiceController(
                     }
 
                     onTranscriptChanged(recognizedText)
-                    onMessageChanged("Mensaje reconocido")
+                    onMessageChanged("Procesando tu instrucción...")
+                    onFinalTranscript(recognizedText)
 
                     speak("He reconocido: $recognizedText")
                 }
@@ -254,17 +256,14 @@ class AuraVoiceController(
                 RecognizerIntent.EXTRA_LANGUAGE_MODEL,
                 RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
             )
-
             putExtra(
                 RecognizerIntent.EXTRA_LANGUAGE,
                 "es-US"
             )
-
             putExtra(
                 RecognizerIntent.EXTRA_MAX_RESULTS,
                 1
             )
-
             putExtra(
                 RecognizerIntent.EXTRA_PARTIAL_RESULTS,
                 true
@@ -279,7 +278,6 @@ class AuraVoiceController(
                 recognitionTimeout,
                 20000L
             )
-
         } catch (exception: Exception) {
             requestActive = false
             handler.removeCallbacks(recognitionTimeout)
@@ -316,8 +314,6 @@ class AuraVoiceController(
             )
             return
         }
-
-        onMessageChanged("Aura está preparando su respuesta...")
 
         val result = textToSpeech?.speak(
             text,
