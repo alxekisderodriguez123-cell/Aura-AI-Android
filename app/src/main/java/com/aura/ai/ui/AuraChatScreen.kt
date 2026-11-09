@@ -10,13 +10,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedTextField
@@ -79,8 +77,6 @@ fun AuraChatScreen(
                     vertical = 18.dp
                 )
         ) {
-
-            // Header
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -105,9 +101,7 @@ fun AuraChatScreen(
                     )
                 }
 
-                TextButton(
-                    onClick = onBack
-                ) {
+                TextButton(onClick = onBack) {
                     Text(
                         text = "← VOLVER",
                         color = Color(0xFF9DBBFF),
@@ -117,7 +111,6 @@ fun AuraChatScreen(
                 }
             }
 
-            // Conversation
             if (messages.isEmpty()) {
                 Box(
                     modifier = Modifier
@@ -162,13 +155,11 @@ fun AuraChatScreen(
                         items = messages,
                         key = { it.id }
                     ) { message ->
-
                         ChatBubble(message = message)
                     }
                 }
             }
 
-            // Composer
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -201,8 +192,7 @@ fun AuraChatScreen(
                         }
                     },
                     enabled = input.isNotBlank(),
-                    modifier = Modifier
-                        .widthIn(min = 48.dp),
+                    modifier = Modifier.widthIn(min = 48.dp),
                     shape = RoundedCornerShape(18.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color(0xFF7189FF),
