@@ -32,9 +32,9 @@ class AuraActionEngine(
                     "Abriendo los controles de Wi-Fi."
                 )
 
-                AuraCommand.OpenBluetoothPanel -> openPanel(
-                    Settings.Panel.ACTION_BLUETOOTH,
-                    "Abriendo los controles de Bluetooth."
+                AuraCommand.OpenBluetoothPanel -> openSettings(
+                    Settings.ACTION_BLUETOOTH_SETTINGS,
+                    "Abriendo los ajustes de Bluetooth."
                 )
 
                 AuraCommand.OpenInternetPanel -> openPanel(
@@ -103,6 +103,7 @@ class AuraActionEngine(
         } ?: return "No encontré una aplicación llamada \"$query\"."
 
         val packageName = app.activityInfo.packageName
+
         val launchIntent = packageManager.getLaunchIntentForPackage(
             packageName
         ) ?: return "Encontré la aplicación, pero Android no permite abrirla."
