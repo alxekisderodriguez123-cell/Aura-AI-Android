@@ -1,3 +1,4 @@
+
 name: Aura Android Build
 
 on:
@@ -37,10 +38,50 @@ jobs:
         with:
           gradle-version: "8.13"
 
+      - name: Restore Aura signing key
+        if: github.event_name != 'pull_request'
+        env:
+          AURA_KEYSTORE_BASE64: ${{ secrets.AURA_KEYSTORE_BASE64 }}
+          AURA_KEYSTORE_PASSWORD: ${{ secrets.AURA_KEYSTORE_PASSWORD }}
+          AURA_KEY_ALIAS: ${{ secrets.AURA_KEY_ALIAS }}
+          AURA_KEY_PASSWORD: ${{ secrets.AURA_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          test -n "$AURA_KEYSTORE_BASE64"
+          test -n "$AURA_KEYSTORE_PASSWORD"
+          test -n "$AURA_KEY_ALIAS"
+          test -n "$AURA_KEY_PASSWORD"
+
+          KEYSTORE_PATH="$RUNNER_TEMP/aura-signing.jks"
+
+          printf '%s' "$AURA_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+
+          test -s "$KEYSTORE_PATH"
+          chmod 600 "$KEYSTORE_PATH"
+
+          keytool -list \
+            -keystore "$KEYSTORE_PATH" \
+            -storepass "$AURA_KEYSTORE_PASSWORD" \
+            -alias "$AURA_KEY_ALIAS" > /dev/null
+
+          echo "Aura signing key restored and validated."
+
       - name: Build debug APK
+        if: github.event_name == 'pull_request'
+        run: gradle --no-daemon assembleDebug
+
+      - name: Build signed debug APK
+        if: github.event_name != 'pull_request'
+        env:
+          AURA_KEYSTORE_PATH: ${{ runner.temp }}/aura-signing.jks
+          AURA_KEYSTORE_PASSWORD: ${{ secrets.AURA_KEYSTORE_PASSWORD }}
+          AURA_KEY_ALIAS: ${{ secrets.AURA_KEY_ALIAS }}
+          AURA_KEY_PASSWORD: ${{ secrets.AURA_KEY_PASSWORD }}
         run: gradle --no-daemon assembleDebug
 
       - name: Upload debug APK
+        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: aura-debug-apk
