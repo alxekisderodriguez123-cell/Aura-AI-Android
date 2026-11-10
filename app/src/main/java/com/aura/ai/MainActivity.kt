@@ -1,6 +1,8 @@
 package com.aura.ai
 
 import android.Manifest
+import android.app.role.RoleManager
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -30,11 +32,24 @@ import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
+    companion object {
+        const val ACTION_ASSISTANT_INVOCATION =
+            "com.aura.ai.action.ASSISTANT_INVOCATION"
+
+        const val ACTION_ONE_TAP_VOICE =
+            "com.aura.ai.action.ONE_TAP_VOICE"
+
+        const val EXTRA_START_LISTENING =
+            "com.aura.ai.extra.START_LISTENING"
+    }
+
     private var voiceState by mutableStateOf(AuraVoiceState.IDLE)
     private var transcript by mutableStateOf("")
     private var voiceMessage by mutableStateOf(
         "Pulsa el botón para hablar con Aura"
     )
+
+    private var assistantRoleHeld by mutableStateOf(false)
 
     private var voiceController: AuraVoiceController? = null
 
@@ -53,6 +68,13 @@ class MainActivity : ComponentActivity() {
 
     private var pendingMusicCommand: AuraCommand? = null
     private var pendingMusicSpeakResponse = false
+
+    private val assistantRoleLauncher =
+        registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+        ) {
+            updateAssistantRoleState()
+        }
 
     private val microphonePermission =
         registerForActivityResult(
@@ -149,12 +171,15 @@ class MainActivity : ComponentActivity() {
             }
         )
 
+        updateAssistantRoleState()
+
         setContent {
             AuraScreen(
                 voiceState = voiceState,
                 transcript = transcript,
                 message = voiceMessage,
                 chatMessages = chatMessages,
+                assistantRoleHeld = assistantRoleHeld,
 
                 onVoiceButtonClick = {
                     handleVoiceButton()
@@ -169,9 +194,86 @@ class MainActivity : ComponentActivity() {
                         text,
                         speakResponse = false
                     )
+                },
+
+                onRequestAssistantRole = {
+                    requestAssistantRole()
                 }
             )
         }
+
+        if (shouldStartListening(intent)) {
+            window.decorView.post {
+                requestMicrophone(continuous = true)
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+
+        if (shouldStartListening(intent)) {
+            requestMicrophone(continuous = true)
+        }
+    }
+
+    private fun shouldStartListening(
+        incomingIntent: Intent?
+    ): Boolean {
+        if (incomingIntent == null) return false
+
+        return incomingIntent.action == ACTION_ASSISTANT_INVOCATION ||
+            incomingIntent.action == ACTION_ONE_TAP_VOICE ||
+            incomingIntent.getBooleanExtra(
+                EXTRA_START_LISTENING,
+                false
+            )
+    }
+
+    private fun updateAssistantRoleState() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            assistantRoleHeld = false
+            return
+        }
+
+        val roleManager = getSystemService(
+            RoleManager::class.java
+        )
+
+        assistantRoleHeld =
+            roleManager.isRoleAvailable(RoleManager.ROLE_ASSISTANT) &&
+                roleManager.isRoleHeld(RoleManager.ROLE_ASSISTANT)
+    }
+
+    private fun requestAssistantRole() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            voiceMessage =
+                "Esta versión de Android no admite el rol de asistente."
+            return
+        }
+
+        val roleManager = getSystemService(
+            RoleManager::class.java
+        )
+
+        if (!roleManager.isRoleAvailable(RoleManager.ROLE_ASSISTANT)) {
+            voiceMessage =
+                "Android no ofrece el rol de asistente en este dispositivo."
+            return
+        }
+
+        if (roleManager.isRoleHeld(RoleManager.ROLE_ASSISTANT)) {
+            assistantRoleHeld = true
+            voiceMessage = "Aura ya es tu asistente predeterminado."
+            return
+        }
+
+        assistantRoleLauncher.launch(
+            roleManager.createRequestRoleIntent(
+                RoleManager.ROLE_ASSISTANT
+            )
+        )
     }
 
     private fun processMessage(
@@ -337,6 +439,11 @@ class MainActivity : ComponentActivity() {
                 Manifest.permission.RECORD_AUDIO
             )
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        updateAssistantRoleState()
     }
 
     override fun onDestroy() {
