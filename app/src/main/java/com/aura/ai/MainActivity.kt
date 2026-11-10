@@ -1,4 +1,3 @@
-
 package com.aura.ai
 
 import android.Manifest
@@ -13,12 +12,20 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import com.aura.ai.actions.AuraActionEngine
+import com.aura.ai.actions.AuraCommand
 import com.aura.ai.actions.AuraCommandParser
 import com.aura.ai.chat.AuraChatDatabase
 import com.aura.ai.chat.ChatMessage
 import com.aura.ai.ui.AuraScreen
 import com.aura.ai.voice.AuraVoiceController
 import com.aura.ai.voice.AuraVoiceState
+import com.google.firebase.appcheck.FirebaseAppCheck
+import com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -29,18 +36,35 @@ class MainActivity : ComponentActivity() {
     )
 
     private var voiceController: AuraVoiceController? = null
+
     private lateinit var chatDatabase: AuraChatDatabase
     private lateinit var actionEngine: AuraActionEngine
+    private lateinit var auraCerebro: AuraCerebro
+
+    private val mainScope = CoroutineScope(
+        SupervisorJob() + Dispatchers.Main.immediate
+    )
 
     private val chatMessages = mutableStateListOf<ChatMessage>()
+
+    private var continuousVoiceActive = false
+    private var pendingContinuousMode = false
 
     private val microphonePermission =
         registerForActivityResult(
             ActivityResultContracts.RequestPermission()
         ) { granted ->
+
             if (granted) {
-                voiceController?.startListening()
+                if (pendingContinuousMode) {
+                    continuousVoiceActive = true
+                    voiceController?.startConversation()
+                } else {
+                    continuousVoiceActive = false
+                    voiceController?.startSingleListening()
+                }
             } else {
+                continuousVoiceActive = false
                 voiceMessage =
                     "Necesito permiso del micrófono para escucharte."
             }
@@ -49,24 +73,46 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // App Check Debug se utiliza únicamente en la compilación debug.
+        try {
+            FirebaseAppCheck.getInstance()
+                .installAppCheckProviderFactory(
+                    DebugAppCheckProviderFactory.getInstance()
+                )
+        } catch (e: Exception) {
+            android.util.Log.e(
+                "Aura",
+                "No se pudo inicializar App Check Debug",
+                e
+            )
+        }
+
         chatDatabase = AuraChatDatabase(applicationContext)
-        actionEngine = AuraActionEngine(this)
+        actionEngine = AuraActionEngine(applicationContext)
+        auraCerebro = AuraCerebro(applicationContext)
 
         chatMessages.addAll(chatDatabase.getMessages())
 
         voiceController = AuraVoiceController(
             context = applicationContext,
+
             onStateChanged = { state ->
                 voiceState = state
             },
+
             onTranscriptChanged = { text ->
                 transcript = text
             },
+
             onMessageChanged = { message ->
                 voiceMessage = message
             },
+
             onFinalTranscript = { recognizedText ->
-                sendChatMessage(recognizedText)
+                processMessage(
+                    recognizedText,
+                    speakResponse = continuousVoiceActive
+                )
             }
         )
 
@@ -76,58 +122,173 @@ class MainActivity : ComponentActivity() {
                 transcript = transcript,
                 message = voiceMessage,
                 chatMessages = chatMessages,
+
                 onVoiceButtonClick = {
                     handleVoiceButton()
                 },
+
+                onChatVoiceButtonClick = {
+                    handleChatVoiceButton()
+                },
+
                 onSendChatMessage = { text ->
-                    sendChatMessage(text)
+                    processMessage(
+                        text,
+                        speakResponse = false
+                    )
                 }
             )
         }
     }
 
-    private fun sendChatMessage(rawText: String) {
+    private fun processMessage(
+        rawText: String,
+        speakResponse: Boolean
+    ) {
+
         val text = rawText.trim()
-        if (text.isEmpty()) return
+
+        if (text.isBlank()) return
 
         val userMessage = ChatMessage(
             text = text,
             isUser = true
         )
 
-        val savedUserMessage = chatDatabase.insertMessage(userMessage)
+        val savedUserMessage =
+            chatDatabase.insertMessage(userMessage)
+
         chatMessages.add(savedUserMessage)
 
         val command = AuraCommandParser.parse(text)
 
-        val responseText = if (command != null) {
-            actionEngine.execute(command)
-        } else {
-            "He guardado tu mensaje. Todavía no tengo conectado el motor de conversación inteligente. Puedo ejecutar comandos locales como abrir aplicaciones, configurar temporizadores, abrir ajustes y controlar el volumen."
+        // El token se procesa de forma independiente.
+        if (command == AuraCommand.CopyAppCheckToken) {
+
+            actionEngine.copyAppCheckToken { result ->
+                finishResponse(result, speakResponse)
+            }
+
+            return
         }
+
+        // Los comandos locales no necesitan Gemini.
+        if (command != null) {
+
+            val result = actionEngine.execute(command)
+
+            finishResponse(result, speakResponse)
+
+            return
+        }
+
+        // Si no es un comando local, consulta Gemini.
+        mainScope.launch {
+
+            voiceState = if (speakResponse) {
+                AuraVoiceState.PROCESSING
+            } else {
+                voiceState
+            }
+
+            if (speakResponse) {
+                voiceMessage = "Aura está pensando..."
+            }
+
+            val history = chatMessages.toList()
+
+            val response = try {
+                auraCerebro.responder(
+                    pregunta = text,
+                    historialLocal = history
+                )
+            } catch (e: Exception) {
+                android.util.Log.e(
+                    "Aura",
+                    "Error procesando mensaje",
+                    e
+                )
+
+                "No pude procesar tu solicitud. Inténtalo otra vez."
+            }
+
+            finishResponse(response, speakResponse)
+        }
+    }
+
+    private fun finishResponse(
+        responseText: String,
+        speakResponse: Boolean
+    ) {
 
         val response = ChatMessage(
             text = responseText,
             isUser = false
         )
 
-        val savedResponse = chatDatabase.insertMessage(response)
+        val savedResponse =
+            chatDatabase.insertMessage(response)
+
         chatMessages.add(savedResponse)
+
+        if (speakResponse) {
+            voiceController?.speakResponse(
+                text = responseText,
+                continueListening = continuousVoiceActive
+            )
+        } else {
+            if (voiceState == AuraVoiceState.PROCESSING) {
+                voiceState = AuraVoiceState.IDLE
+                voiceMessage = "Aura está preparada"
+            }
+        }
     }
 
     private fun handleVoiceButton() {
-        if (voiceState == AuraVoiceState.LISTENING) {
+
+        if (continuousVoiceActive) {
+            continuousVoiceActive = false
+            voiceController?.stopConversation()
+            return
+        }
+
+        requestMicrophone(continuous = true)
+    }
+
+    private fun handleChatVoiceButton() {
+
+        if (
+            !continuousVoiceActive &&
+            voiceState == AuraVoiceState.LISTENING
+        ) {
             voiceController?.stopListening()
             return
         }
 
-        val permissionGranted = ContextCompat.checkSelfPermission(
+        continuousVoiceActive = false
+
+        requestMicrophone(continuous = false)
+    }
+
+    private fun requestMicrophone(continuous: Boolean) {
+
+        pendingContinuousMode = continuous
+
+        val granted = ContextCompat.checkSelfPermission(
             this,
             Manifest.permission.RECORD_AUDIO
         ) == PackageManager.PERMISSION_GRANTED
 
-        if (permissionGranted) {
-            voiceController?.startListening()
+        if (granted) {
+
+            if (continuous) {
+                continuousVoiceActive = true
+                voiceController?.startConversation()
+            } else {
+                continuousVoiceActive = false
+                voiceController?.startSingleListening()
+            }
+
         } else {
             microphonePermission.launch(
                 Manifest.permission.RECORD_AUDIO
@@ -136,8 +297,13 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+
+        continuousVoiceActive = false
+
         voiceController?.release()
         voiceController = null
+
+        mainScope.cancel()
 
         if (::chatDatabase.isInitialized) {
             chatDatabase.close()
