@@ -1,13 +1,16 @@
 package com.aura.ai.assistant
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.service.voice.VoiceInteractionSession
 import com.aura.ai.MainActivity
 
 class AuraVoiceInteractionSession(
-    context: android.content.Context
+    context: Context
 ) : VoiceInteractionSession(context) {
+
+    private val appContext = context
 
     override fun onShow(
         args: Bundle?,
@@ -16,7 +19,7 @@ class AuraVoiceInteractionSession(
         super.onShow(args, showFlags)
 
         val intent = Intent(
-            context,
+            appContext,
             MainActivity::class.java
         ).apply {
             action = MainActivity.ACTION_ASSISTANT_INVOCATION
