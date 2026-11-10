@@ -2,6 +2,7 @@ package com.aura.ai.actions
 
 import android.content.Context
 import android.util.Log
+import com.aura.ai.media.AuraLocalMusicActions
 
 class AuraActionEngine(context: Context) {
 
@@ -9,11 +10,11 @@ class AuraActionEngine(context: Context) {
     private val clock = AuraClockActions(context.applicationContext)
     private val maps = AuraMapsActions(context.applicationContext)
     private val media = AuraMediaActions(context.applicationContext)
+    private val localMusic = AuraLocalMusicActions(context.applicationContext)
     private val device = AuraDeviceActions(context.applicationContext)
     private val appCheckToken = AuraAppCheckToken(context.applicationContext)
 
     fun execute(command: AuraCommand): String {
-
         return try {
             when (command) {
 
@@ -36,7 +37,10 @@ class AuraActionEngine(context: Context) {
                     media.youtube(command.query, command.play)
 
                 is AuraCommand.SearchYouTubeMusic ->
-                    media.youtubeMusic(command.query, command.play)
+                    localMusic.playLocalOrFallback(
+                        command.query,
+                        command.play
+                    )
 
                 is AuraCommand.SearchSpotify ->
                     media.spotify(command.query, command.play)
@@ -71,11 +75,9 @@ class AuraActionEngine(context: Context) {
                 is AuraCommand.Sms ->
                     app.sms(command.number)
             }
-
         } catch (e: SecurityException) {
             Log.e("AuraActions", "Permiso denegado", e)
             "Android bloqueó esta acción por falta de permisos."
-
         } catch (e: Exception) {
             Log.e("AuraActions", "Error ejecutando comando", e)
             "No pude completar la acción: ${e.message ?: "error desconocido"}"
