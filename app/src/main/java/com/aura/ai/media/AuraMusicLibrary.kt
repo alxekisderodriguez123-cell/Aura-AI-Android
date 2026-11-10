@@ -1,8 +1,10 @@
 package com.aura.ai.media
 
 import android.Manifest
+import android.content.ContentUris
 import android.content.Context
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
 import androidx.core.content.ContextCompat
@@ -24,7 +26,10 @@ class AuraMusicLibrary(context: Context) {
         ) == PackageManager.PERMISSION_GRANTED
     }
 
-    fun search(query: String, limit: Int = 30): List<AuraTrack> {
+    fun search(
+        query: String,
+        limit: Int = 30
+    ): List<AuraTrack> {
         if (!hasPermission() || query.isBlank()) {
             return emptyList()
         }
@@ -37,6 +42,7 @@ class AuraMusicLibrary(context: Context) {
             MediaStore.Audio.Media.TITLE,
             MediaStore.Audio.Media.ARTIST,
             MediaStore.Audio.Media.ALBUM,
+            MediaStore.Audio.Media.ALBUM_ID,
             MediaStore.Audio.Media.DURATION
         )
 
@@ -50,7 +56,6 @@ class AuraMusicLibrary(context: Context) {
         """.trimIndent()
 
         val searchTerm = "%${query.trim()}%"
-
         val sortOrder =
             "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE ASC"
 
@@ -75,16 +80,32 @@ class AuraMusicLibrary(context: Context) {
                 val albumColumn = cursor.getColumnIndexOrThrow(
                     MediaStore.Audio.Media.ALBUM
                 )
+                val albumIdColumn = cursor.getColumnIndexOrThrow(
+                    MediaStore.Audio.Media.ALBUM_ID
+                )
                 val durationColumn = cursor.getColumnIndexOrThrow(
                     MediaStore.Audio.Media.DURATION
                 )
 
                 while (cursor.moveToNext() && tracks.size < limit) {
                     val id = cursor.getLong(idColumn)
-                    val contentUri = android.content.ContentUris.withAppendedId(
+                    val albumId = cursor.getLong(albumIdColumn)
+
+                    val contentUri = ContentUris.withAppendedId(
                         collection,
                         id
                     )
+
+                    val artworkUri = if (albumId > 0L) {
+                        ContentUris.withAppendedId(
+                            Uri.parse(
+                                "content://media/external/audio/albumart"
+                            ),
+                            albumId
+                        )
+                    } else {
+                        null
+                    }
 
                     tracks.add(
                         AuraTrack(
@@ -97,7 +118,8 @@ class AuraMusicLibrary(context: Context) {
                             album = cursor.getString(albumColumn)
                                 ?: "Álbum desconocido",
                             uri = contentUri,
-                            duration = cursor.getLong(durationColumn)
+                            duration = cursor.getLong(durationColumn),
+                            albumArtUri = artworkUri
                         )
                     )
                 }
