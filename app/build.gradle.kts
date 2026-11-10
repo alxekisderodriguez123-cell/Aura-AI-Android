@@ -1,31 +1,26 @@
 plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.android")
-    id("com.google.gms.google-services")
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.compose)
 }
 
 android {
-    namespace = "com.astra.ai"
-    compileSdk = 34
+    namespace = "com.aura.ai"
+    compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.astra.ai"
+        applicationId = "com.aura.ai"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 36
+
         versionCode = 1
-        versionName = "1.0"
+        versionName = "0.1.0"
+
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    // Misma firma en todos los builds: así el APK nuevo se instala encima del anterior
-    // y el token de depuración de App Check no cambia.
-    signingConfigs {
-        getByName("debug") {
-            storeFile = file("debug.keystore")
-            storeType = "pkcs12"
-            storePassword = "android"
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
-        }
+    buildFeatures {
+        compose = true
     }
 
     compileOptions {
@@ -36,13 +31,24 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+    }
 }
 
 dependencies {
-    implementation(platform("com.google.firebase:firebase-bom:35.1.0"))
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.activity.compose)
 
-    implementation("com.google.firebase:firebase-ai")
-    implementation("com.google.firebase:firebase-appcheck-debug")
+    implementation(platform(libs.androidx.compose.bom))
 
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    implementation(libs.androidx.compose.ui)
+    implementation(libs.androidx.compose.ui.graphics)
+    implementation(libs.androidx.compose.ui.tooling.preview)
+    implementation(libs.androidx.compose.material3)
+
+    debugImplementation(libs.androidx.compose.ui.tooling)
 }
