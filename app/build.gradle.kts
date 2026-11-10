@@ -1,8 +1,35 @@
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     id("com.google.gms.google-services")
+}
+
+val auraKeystorePath = System.getenv("AURA_KEYSTORE_PATH")
+val auraKeystorePassword = System.getenv("AURA_KEYSTORE_PASSWORD")
+val auraKeyAlias = System.getenv("AURA_KEY_ALIAS")
+val auraKeyPassword = System.getenv("AURA_KEY_PASSWORD")
+
+val auraSigningValues = listOf(
+    auraKeystorePath,
+    auraKeystorePassword,
+    auraKeyAlias,
+    auraKeyPassword
+)
+
+val hasAuraSigning = auraSigningValues.all {
+    !it.isNullOrBlank()
+}
+
+val hasPartialAuraSigning = auraSigningValues.any {
+    !it.isNullOrBlank()
+}
+
+if (hasPartialAuraSigning && !hasAuraSigning) {
+    throw GradleException(
+        "Aura signing configuration is incomplete. Check GitHub Actions secrets."
+    )
 }
 
 android {
@@ -19,6 +46,26 @@ android {
 
         testInstrumentationRunner =
             "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        if (hasAuraSigning) {
+            create("aura") {
+                storeFile = file(auraKeystorePath!!)
+                storePassword = auraKeystorePassword
+                keyAlias = auraKeyAlias
+                keyPassword = auraKeyPassword
+                storeType = "JKS"
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("debug") {
+            if (hasAuraSigning) {
+                signingConfig = signingConfigs.getByName("aura")
+            }
+        }
     }
 
     buildFeatures {
