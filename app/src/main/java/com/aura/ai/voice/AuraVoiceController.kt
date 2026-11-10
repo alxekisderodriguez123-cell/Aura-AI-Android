@@ -1,4 +1,3 @@
-
 package com.aura.ai.voice
 
 import android.content.Context
@@ -30,21 +29,11 @@ class AuraVoiceController(
     private var isTtsReady = false
     private var isReleased = false
     private var requestActive = false
-    private var audioReported = false
+    private var continuousMode = false
 
-    private val recognitionTimeout = Runnable {
-        if (requestActive && !isReleased) {
-            requestActive = false
-
-            try {
-                recognizer?.cancel()
-            } catch (_: Exception) {
-            }
-
-            onStateChanged(AuraVoiceState.IDLE)
-            onMessageChanged(
-                "No recibí una respuesta del servicio de reconocimiento. Comprueba el motor de voz de Android."
-            )
+    private val restartListening = Runnable {
+        if (continuousMode && !isReleased && !requestActive) {
+            startListeningInternal()
         }
     }
 
@@ -54,29 +43,33 @@ class AuraVoiceController(
     }
 
     private fun initializeTextToSpeech() {
+
         textToSpeech = TextToSpeech(appContext) { status ->
+
             if (status == TextToSpeech.SUCCESS && !isReleased) {
+
                 val engine = textToSpeech ?: return@TextToSpeech
 
-                val languageResult = engine.setLanguage(
+                val result = engine.setLanguage(
                     Locale("es", "US")
                 )
 
                 isTtsReady =
-                    languageResult != TextToSpeech.LANG_MISSING_DATA &&
-                    languageResult != TextToSpeech.LANG_NOT_SUPPORTED
+                    result != TextToSpeech.LANG_MISSING_DATA &&
+                    result != TextToSpeech.LANG_NOT_SUPPORTED
 
                 if (isTtsReady) {
                     engine.setSpeechRate(0.96f)
                     onMessageChanged("Voz de Aura preparada")
                 } else {
                     onMessageChanged(
-                        "El motor de voz no tiene español instalado"
+                        "Instala una voz en español en los ajustes de Android."
                     )
                 }
+
             } else if (!isReleased) {
                 onMessageChanged(
-                    "No se pudo inicializar la síntesis de voz"
+                    "No se pudo inicializar la síntesis de voz."
                 )
             }
         }
@@ -93,8 +86,18 @@ class AuraVoiceController(
 
                 override fun onDone(utteranceId: String?) {
                     if (!isReleased) {
-                        onStateChanged(AuraVoiceState.IDLE)
-                        onMessageChanged("Aura está preparada")
+                        if (continuousMode) {
+                            onMessageChanged(
+                                "Puedes seguir hablándome."
+                            )
+                            handler.postDelayed(
+                                restartListening,
+                                450L
+                            )
+                        } else {
+                            onStateChanged(AuraVoiceState.IDLE)
+                            onMessageChanged("Aura está preparada")
+                        }
                     }
                 }
 
@@ -103,7 +106,7 @@ class AuraVoiceController(
                     if (!isReleased) {
                         onStateChanged(AuraVoiceState.IDLE)
                         onMessageChanged(
-                            "No se pudo reproducir la respuesta de voz"
+                            "No se pudo reproducir la respuesta de voz."
                         )
                     }
                 }
@@ -112,18 +115,19 @@ class AuraVoiceController(
     }
 
     private fun initializeSpeechRecognizer() {
+
         if (!SpeechRecognizer.isRecognitionAvailable(appContext)) {
             onMessageChanged(
-                "Android no tiene un servicio de reconocimiento disponible"
+                "Android no tiene un servicio de reconocimiento disponible."
             )
             return
         }
 
         recognizer = try {
             SpeechRecognizer.createSpeechRecognizer(appContext)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
             onMessageChanged(
-                "No se pudo iniciar el servicio de reconocimiento"
+                "No se pudo iniciar el reconocimiento de voz."
             )
             null
         }
@@ -140,23 +144,11 @@ class AuraVoiceController(
 
                 override fun onBeginningOfSpeech() {
                     if (!isReleased && requestActive) {
-                        audioReported = true
-                        onMessageChanged("He detectado tu voz...")
+                        onMessageChanged("Te escucho...")
                     }
                 }
 
-                override fun onRmsChanged(rmsdB: Float) {
-                    if (
-                        !isReleased &&
-                        requestActive &&
-                        !audioReported
-                    ) {
-                        audioReported = true
-                        onMessageChanged(
-                            "Recibiendo señal de audio..."
-                        )
-                    }
-                }
+                override fun onRmsChanged(rmsdB: Float) = Unit
 
                 override fun onBufferReceived(buffer: ByteArray?) = Unit
 
@@ -168,20 +160,37 @@ class AuraVoiceController(
                 }
 
                 override fun onError(error: Int) {
+
                     if (isReleased || !requestActive) return
 
                     requestActive = false
-                    handler.removeCallbacks(recognitionTimeout)
 
-                    onStateChanged(AuraVoiceState.IDLE)
-                    onMessageChanged(errorMessage(error))
+                    if (
+                        continuousMode &&
+                        (
+                            error == SpeechRecognizer.ERROR_NO_MATCH ||
+                            error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT
+                        )
+                    ) {
+                        onMessageChanged(
+                            "No te escuché bien. Te sigo escuchando."
+                        )
+
+                        handler.postDelayed(
+                            restartListening,
+                            500L
+                        )
+                    } else {
+                        onStateChanged(AuraVoiceState.IDLE)
+                        onMessageChanged(errorMessage(error))
+                    }
                 }
 
                 override fun onResults(results: Bundle?) {
+
                     if (isReleased || !requestActive) return
 
                     requestActive = false
-                    handler.removeCallbacks(recognitionTimeout)
 
                     val matches = results?.getStringArrayList(
                         SpeechRecognizer.RESULTS_RECOGNITION
@@ -195,29 +204,32 @@ class AuraVoiceController(
                     if (recognizedText.isBlank()) {
                         onStateChanged(AuraVoiceState.IDLE)
                         onMessageChanged(
-                            "El servicio respondió, pero no reconoció palabras"
+                            "No pude reconocer lo que dijiste."
                         )
                         return
                     }
 
                     onTranscriptChanged(recognizedText)
-                    onMessageChanged("Procesando tu instrucción...")
-                    onFinalTranscript(recognizedText)
+                    onStateChanged(AuraVoiceState.PROCESSING)
+                    onMessageChanged("Aura está pensando...")
 
-                    speak("He reconocido: $recognizedText")
+                    // La respuesta se procesa en MainActivity.
+                    // Aquí no se pronuncia una confirmación falsa.
+                    onFinalTranscript(recognizedText)
                 }
 
                 override fun onPartialResults(partialResults: Bundle?) {
+
                     if (isReleased || !requestActive) return
 
                     val matches = partialResults?.getStringArrayList(
                         SpeechRecognizer.RESULTS_RECOGNITION
                     )
 
-                    val partialText = matches?.firstOrNull()
+                    val partial = matches?.firstOrNull()
 
-                    if (!partialText.isNullOrBlank()) {
-                        onTranscriptChanged(partialText)
+                    if (!partial.isNullOrBlank()) {
+                        onTranscriptChanged(partial)
                     }
                 }
 
@@ -229,7 +241,26 @@ class AuraVoiceController(
         )
     }
 
-    fun startListening() {
+    fun startConversation() {
+        if (isReleased) return
+
+        continuousMode = true
+        handler.removeCallbacks(restartListening)
+
+        startListeningInternal()
+    }
+
+    fun startSingleListening() {
+        if (isReleased) return
+
+        continuousMode = false
+        handler.removeCallbacks(restartListening)
+
+        startListeningInternal()
+    }
+
+    private fun startListeningInternal() {
+
         if (isReleased || requestActive) return
 
         val speechRecognizer = recognizer
@@ -237,7 +268,7 @@ class AuraVoiceController(
         if (speechRecognizer == null) {
             onStateChanged(AuraVoiceState.IDLE)
             onMessageChanged(
-                "El servicio de reconocimiento no está disponible"
+                "El servicio de reconocimiento no está disponible."
             )
             return
         }
@@ -247,7 +278,6 @@ class AuraVoiceController(
         onStateChanged(AuraVoiceState.LISTENING)
 
         requestActive = true
-        audioReported = false
 
         val intent = Intent(
             RecognizerIntent.ACTION_RECOGNIZE_SPEECH
@@ -273,45 +303,34 @@ class AuraVoiceController(
         try {
             speechRecognizer.startListening(intent)
 
-            handler.removeCallbacks(recognitionTimeout)
-            handler.postDelayed(
-                recognitionTimeout,
-                20000L
-            )
-        } catch (exception: Exception) {
+        } catch (e: Exception) {
             requestActive = false
-            handler.removeCallbacks(recognitionTimeout)
-
             onStateChanged(AuraVoiceState.IDLE)
             onMessageChanged(
-                "No se pudo iniciar la escucha: ${exception.message ?: "error desconocido"}"
+                "No se pudo iniciar la escucha: ${e.message ?: "error desconocido"}"
             )
         }
     }
 
-    fun stopListening() {
-        if (isReleased || !requestActive) return
+    fun speakResponse(
+        text: String,
+        continueListening: Boolean
+    ) {
 
-        requestActive = false
-        handler.removeCallbacks(recognitionTimeout)
-
-        try {
-            recognizer?.cancel()
-        } catch (_: Exception) {
-        }
-
-        onStateChanged(AuraVoiceState.IDLE)
-        onMessageChanged("Escucha detenida")
-    }
-
-    private fun speak(text: String) {
         if (isReleased) return
+
+        continuousMode = continueListening
 
         if (!isTtsReady) {
             onStateChanged(AuraVoiceState.IDLE)
             onMessageChanged(
-                "Reconocí tu mensaje, pero la voz de salida no está disponible"
+                "La respuesta está lista, pero la voz de salida no está disponible."
             )
+
+            if (continuousMode) {
+                handler.postDelayed(restartListening, 500L)
+            }
+
             return
         }
 
@@ -319,61 +338,83 @@ class AuraVoiceController(
             text,
             TextToSpeech.QUEUE_FLUSH,
             null,
-            "aura-voice-confirmation"
+            "aura-response"
         )
 
         if (result == TextToSpeech.ERROR) {
             onStateChanged(AuraVoiceState.IDLE)
             onMessageChanged(
-                "El motor de voz rechazó la reproducción"
+                "El motor de voz rechazó la respuesta."
             )
         }
     }
 
-    private fun errorMessage(error: Int): String {
-        return when (error) {
+    fun stopConversation() {
+
+        continuousMode = false
+        handler.removeCallbacks(restartListening)
+
+        try {
+            recognizer?.cancel()
+            textToSpeech?.stop()
+        } catch (_: Exception) {
+        }
+
+        requestActive = false
+
+        onStateChanged(AuraVoiceState.IDLE)
+        onMessageChanged("Conversación por voz detenida")
+    }
+
+    fun stopListening() {
+        stopConversation()
+    }
+
+    private fun errorMessage(error: Int): String =
+        when (error) {
             SpeechRecognizer.ERROR_AUDIO ->
-                "Error al acceder al audio del micrófono"
+                "Error al acceder al micrófono."
 
             SpeechRecognizer.ERROR_CLIENT ->
-                "El servicio de reconocimiento interrumpió la solicitud"
+                "El servicio de reconocimiento interrumpió la solicitud."
 
             SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS ->
-                "Android no concedió permiso para utilizar el micrófono"
+                "Android no concedió permiso para utilizar el micrófono."
 
             SpeechRecognizer.ERROR_NETWORK ->
-                "El servicio de voz tiene un problema de conexión"
+                "El servicio de voz tiene un problema de conexión."
 
             SpeechRecognizer.ERROR_NETWORK_TIMEOUT ->
-                "El servicio de voz agotó el tiempo de conexión"
+                "El servicio de reconocimiento agotó el tiempo de conexión."
 
             SpeechRecognizer.ERROR_NO_MATCH ->
-                "No pude reconocer las palabras. Inténtalo otra vez"
+                "No pude reconocer las palabras."
 
             SpeechRecognizer.ERROR_RECOGNIZER_BUSY ->
-                "El servicio de reconocimiento está ocupado"
+                "El servicio de reconocimiento está ocupado."
 
             SpeechRecognizer.ERROR_SERVER ->
-                "El servidor de reconocimiento devolvió un error"
+                "El servidor de reconocimiento devolvió un error."
 
             SpeechRecognizer.ERROR_SPEECH_TIMEOUT ->
-                "No detecté voz. Comprueba el micrófono y vuelve a intentarlo"
+                "No detecté voz."
 
             SpeechRecognizer.ERROR_TOO_MANY_REQUESTS ->
-                "Se realizaron demasiadas solicitudes de voz"
+                "Se realizaron demasiadas solicitudes de voz."
 
             else ->
                 "Error de reconocimiento de voz. Código: $error"
         }
-    }
 
     fun release() {
+
         if (isReleased) return
 
         isReleased = true
+        continuousMode = false
         requestActive = false
 
-        handler.removeCallbacks(recognitionTimeout)
+        handler.removeCallbacksAndMessages(null)
 
         try {
             recognizer?.cancel()
