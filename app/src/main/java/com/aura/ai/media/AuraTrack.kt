@@ -8,5 +8,6 @@ data class AuraTrack(
     val artist: String,
     val album: String,
     val uri: Uri,
-    val duration: Long
+    val duration: Long,
+    val albumArtUri: Uri? = null
 )
