@@ -1,3 +1,4 @@
+
 package com.aura.ai.actions
 
 import java.text.Normalizer
@@ -147,22 +148,29 @@ object AuraCommandParser {
         }
 
         // Temporizadores.
-        val timerText = convertNumbers(text)
-
+        // Primero identificamos la orden y después convertimos
+        // los números escritos con palabras.
         val timer = Regex(
-            """(?:pon(?:me)?\s+)?(?:un\s+)?(?:temporizador|timer|cuenta atras)(?:\s+(?:de|para))?\s+(.+)"""
-        ).find(timerText)
+            """^(?:(?:pon|ponme|inicia|activa|configura)\s+)?(?:(?:un|uno|una|1)\s+)?(?:temporizador|timer|cuenta\s+atras)(?:\s+(?:de|para|por))?\s+(.+)$"""
+        ).find(text)
 
         if (timer != null) {
+
+            val duration = convertNumbers(
+                timer.groupValues[1]
+            )
+
             var seconds = 0L
-            val duration = timer.groupValues[1]
 
             val units = Regex(
                 """(\d+)\s*(horas?|h|minutos?|mins?|min|segundos?|segs?|seg)"""
             )
 
             units.findAll(duration).forEach { match ->
-                val amount = match.groupValues[1].toLongOrNull() ?: 0L
+
+                val amount = match.groupValues[1]
+                    .toLongOrNull() ?: 0L
+
                 val unit = match.groupValues[2]
 
                 seconds += when {
@@ -194,8 +202,11 @@ object AuraCommandParser {
                 """(?:a las|para las|alarma a las)\s+(\d{1,2})(?::(\d{2}))?"""
             ).find(alarmText) ?: return null
 
-            var hour = match.groupValues[1].toIntOrNull() ?: return null
-            val minute = match.groupValues[2].toIntOrNull() ?: 0
+            var hour = match.groupValues[1]
+                .toIntOrNull() ?: return null
+
+            val minute = match.groupValues[2]
+                .toIntOrNull() ?: 0
 
             if (hour !in 0..23 || minute !in 0..59) {
                 return null
@@ -215,6 +226,28 @@ object AuraCommandParser {
             if (am && hour == 12) hour = 0
 
             return AuraCommand.SetAlarm(hour, minute)
+        }
+
+        // Búsquedas explícitas en Google.
+        // Se procesan antes de las órdenes multimedia para evitar
+        // que "busca en Google..." termine en YouTube Music.
+        val googleQuery = when {
+
+            text.startsWith("busca en google ") ->
+                text.removePrefix("busca en google ").trim()
+
+            text.startsWith("googlea ") ->
+                text.removePrefix("googlea ").trim()
+
+            else -> {
+                Regex(
+                    """^busca\s+(.+?)\s+en\s+google$"""
+                ).find(text)?.groupValues?.get(1)?.trim()
+            }
+        }
+
+        if (!googleQuery.isNullOrBlank()) {
+            return AuraCommand.SearchGoogle(googleQuery)
         }
 
         // Búsquedas y reproducción de música o vídeos.
@@ -270,17 +303,6 @@ object AuraCommandParser {
                         AuraCommand.SearchYouTubeMusic(query, play)
                 }
             }
-        }
-
-        // Búsqueda en Google.
-        val google = Regex(
-            """^(busca|buscame|googlea|busca en google)\s+(.+)$"""
-        ).find(text)
-
-        if (google != null) {
-            return AuraCommand.SearchGoogle(
-                google.groupValues[2].trim()
-            )
         }
 
         // Volumen.
