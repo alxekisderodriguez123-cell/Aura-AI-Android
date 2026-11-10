@@ -18,9 +18,15 @@ class AuraDeviceActions(private val context: Context) {
         val max = audio.getStreamMaxVolume(stream)
         val current = audio.getStreamVolume(stream)
 
+        if (max <= 0) {
+            return "No pude consultar el volumen multimedia."
+        }
+
+        val step = maxOf(1, max / 5)
+
         val next = when (operation) {
-            "up" -> current + maxOf(1, max / 5)
-            "down" -> current - maxOf(1, max / 5)
+            "up" -> current + step
+            "down" -> current - step
             "max" -> max
             "min", "mute" -> 0
             else -> current
@@ -47,10 +53,12 @@ class AuraDeviceActions(private val context: Context) {
             ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
             context.startActivity(permissionIntent)
+
             return "Necesito autorización para modificar el brillo. Activa el permiso de Aura y vuelve a pedírmelo."
         }
 
         val resolver = context.contentResolver
+
         val current = Settings.System.getInt(
             resolver,
             Settings.System.SCREEN_BRIGHTNESS,
@@ -80,15 +88,21 @@ class AuraDeviceActions(private val context: Context) {
         return "Brillo ajustado al ${next * 100 / 255} por ciento."
     }
 
-    fun wifi(): String = openPanel(
-        Settings.Panel.ACTION_WIFI,
-        "Abriendo los controles de Wi-Fi."
-    )
+    fun wifi(): String {
+        return openPanel(
+            Settings.Panel.ACTION_WIFI,
+            Settings.ACTION_WIFI_SETTINGS,
+            "Abriendo los controles de Wi-Fi."
+        )
+    }
 
-    fun internet(): String = openPanel(
-        Settings.Panel.ACTION_INTERNET_CONNECTIVITY,
-        "Abriendo los controles de Internet y conectividad."
-    )
+    fun internet(): String {
+        return openPanel(
+            Settings.Panel.ACTION_INTERNET_CONNECTIVITY,
+            Settings.ACTION_WIRELESS_SETTINGS,
+            "Abriendo los controles de Internet y conectividad."
+        )
+    }
 
     fun bluetooth(): String {
         val intent = Intent(
@@ -102,15 +116,28 @@ class AuraDeviceActions(private val context: Context) {
     fun settings(): String {
         val intent = Intent(
             Settings.ACTION_SETTINGS
-        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) etc
+        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
         context.startActivity(intent)
         return "Abriendo los ajustes del teléfono."
     }
 
-    private fun openPanel(action: String, message: String): String {
-        val intent = Intent(action)
+    private fun openPanel(
+        panelAction: String,
+        fallbackAction: String,
+        message: String
+    ): String {
+        val panelIntent = Intent(panelAction)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+        val intent = if (
+            panelIntent.resolveActivity(context.packageManager) != null
+        ) {
+            panelIntent
+        } else {
+            Intent(fallbackAction)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
 
         context.startActivity(intent)
         return message
