@@ -25,20 +25,27 @@ class AuraLocalMusicActions(context: Context) {
             return externalMedia.youtubeMusic(query, true)
         }
 
-        val track = library.search(query, limit = 20)
-            .firstOrNull()
+        val tracks = library.search(
+            query = query,
+            limit = 30
+        )
 
-        if (track == null) {
+        if (tracks.isEmpty()) {
             return externalMedia.youtubeMusic(query, true)
         }
 
         AuraPlaybackService.play(
             context = appContext,
-            uri = track.uri,
-            title = track.title,
-            artist = track.artist
+            tracks = tracks
         )
 
-        return "Reproduciendo ${track.title} de ${track.artist} desde tu biblioteca."
+        val first = tracks.first()
+
+        return if (tracks.size == 1) {
+            "Reproduciendo ${first.title} de ${first.artist} desde tu biblioteca."
+        } else {
+            "Reproduciendo ${first.title} de ${first.artist}. " +
+                "Encontré ${tracks.size} canciones y las añadí a la cola de Aura."
+        }
     }
 }
