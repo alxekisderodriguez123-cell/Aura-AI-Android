@@ -16,14 +16,18 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,8 +40,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import com.aura.ai.chat.ChatMessage
+import com.aura.ai.media.AuraPlaybackController
 import com.aura.ai.voice.AuraVoiceState
+import kotlinx.coroutines.delay
 
 @Composable
 fun AuraScreen(
@@ -45,11 +52,32 @@ fun AuraScreen(
     transcript: String,
     message: String,
     chatMessages: List<ChatMessage>,
+    assistantRoleHeld: Boolean,
     onVoiceButtonClick: () -> Unit,
     onChatVoiceButtonClick: () -> Unit,
-    onSendChatMessage: (String) -> Unit
+    onSendChatMessage: (String) -> Unit,
+    onRequestAssistantRole: () -> Unit
 ) {
     var showingChat by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+
+    val playback = remember {
+        AuraPlaybackController(context)
+    }
+
+    DisposableEffect(playback) {
+        onDispose {
+            playback.release()
+        }
+    }
+
+    LaunchedEffect(playback) {
+        while (true) {
+            playback.refresh()
+            delay(500)
+        }
+    }
 
     if (showingChat) {
         AuraChatScreen(
@@ -63,8 +91,11 @@ fun AuraScreen(
             voiceState = voiceState,
             transcript = transcript,
             message = message,
+            playback = playback,
+            assistantRoleHeld = assistantRoleHeld,
             onVoiceButtonClick = onVoiceButtonClick,
-            onChatClick = { showingChat = true }
+            onChatClick = { showingChat = true },
+            onRequestAssistantRole = onRequestAssistantRole
         )
     }
 }
@@ -74,10 +105,12 @@ private fun AuraVoiceScreen(
     voiceState: AuraVoiceState,
     transcript: String,
     message: String,
+    playback: AuraPlaybackController,
+    assistantRoleHeld: Boolean,
     onVoiceButtonClick: () -> Unit,
-    onChatClick: () -> Unit
+    onChatClick: () -> Unit,
+    onRequestAssistantRole: () -> Unit
 ) {
-
     val isListening =
         voiceState == AuraVoiceState.LISTENING
 
@@ -105,7 +138,6 @@ private fun AuraVoiceScreen(
                     )
                 )
         ) {
-
             Box(
                 modifier = Modifier
                     .size(360.dp)
@@ -123,13 +155,13 @@ private fun AuraVoiceScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
                     .padding(
                         horizontal = 25.dp,
                         vertical = 24.dp
                     ),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -137,7 +169,6 @@ private fun AuraVoiceScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-
                     Column {
                         Text(
                             text = "A U R A",
@@ -158,7 +189,6 @@ private fun AuraVoiceScreen(
                     Column(
                         horizontalAlignment = Alignment.End
                     ) {
-
                         Surface(
                             color = Color.White.copy(alpha = 0.07f),
                             shape = CircleShape
@@ -170,7 +200,6 @@ private fun AuraVoiceScreen(
                                 ),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-
                                 Box(
                                     modifier = Modifier
                                         .size(6.dp)
@@ -207,7 +236,7 @@ private fun AuraVoiceScreen(
                     }
                 }
 
-                Spacer(Modifier.weight(0.65f))
+                Spacer(Modifier.height(28.dp))
 
                 AuraOrb(state = voiceState)
 
@@ -221,7 +250,6 @@ private fun AuraVoiceScreen(
                     },
                     label = "aura_status_transition"
                 ) { state ->
-
                     Text(
                         text = when (state) {
                             AuraVoiceState.IDLE -> "Estoy aquí"
@@ -246,20 +274,17 @@ private fun AuraVoiceScreen(
                     lineHeight = 20.sp
                 )
 
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(16.dp))
 
                 if (transcript.isNotBlank()) {
-
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         color = Color.White.copy(alpha = 0.07f),
                         shape = RoundedCornerShape(23.dp)
                     ) {
-
                         Column(
                             Modifier.padding(17.dp)
                         ) {
-
                             Text(
                                 text = "TE HE ESCUCHADO",
                                 color = Color(0xFF91B9E8),
@@ -279,10 +304,75 @@ private fun AuraVoiceScreen(
                         }
                     }
 
-                    Spacer(Modifier.height(17.dp))
+                    Spacer(Modifier.height(15.dp))
                 }
 
-                Spacer(Modifier.weight(0.25f))
+                AuraPlayerPanel(playback)
+
+                Spacer(Modifier.height(14.dp))
+
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = Color.White.copy(alpha = 0.045f),
+                    shape = RoundedCornerShape(18.dp),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        Color.White.copy(alpha = 0.09f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                horizontal = 14.dp,
+                                vertical = 12.dp
+                            ),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = "ASISTENTE DE ANDROID",
+                                color = Color(0xFFE3ECFF),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp
+                            )
+
+                            Text(
+                                text = if (assistantRoleHeld) {
+                                    "Aura está seleccionada como asistente"
+                                } else {
+                                    "Permite invocar Aura desde el sistema"
+                                },
+                                color = Color(0xFF9BAAC8),
+                                fontSize = 10.sp
+                            )
+                        }
+
+                        TextButton(
+                            onClick = onRequestAssistantRole
+                        ) {
+                            Text(
+                                text = if (assistantRoleHeld) {
+                                    "ACTIVA"
+                                } else {
+                                    "CONFIGURAR"
+                                },
+                                color = if (assistantRoleHeld) {
+                                    Color(0xFF7DE6D0)
+                                } else {
+                                    Color(0xFFB8C9FF)
+                                },
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
 
                 Button(
                     onClick = onVoiceButtonClick,
@@ -295,7 +385,6 @@ private fun AuraVoiceScreen(
                         contentColor = Color(0xFF081020)
                     )
                 ) {
-
                     Text(
                         text = if (isListening) {
                             "DETENER CONVERSACIÓN"
