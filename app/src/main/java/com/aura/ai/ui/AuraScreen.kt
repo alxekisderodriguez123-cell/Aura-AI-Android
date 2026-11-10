@@ -1,4 +1,3 @@
-
 package com.aura.ai.ui
 
 import androidx.compose.animation.AnimatedContent
@@ -47,6 +46,7 @@ fun AuraScreen(
     message: String,
     chatMessages: List<ChatMessage>,
     onVoiceButtonClick: () -> Unit,
+    onChatVoiceButtonClick: () -> Unit,
     onSendChatMessage: (String) -> Unit
 ) {
     var showingChat by remember { mutableStateOf(false) }
@@ -55,7 +55,7 @@ fun AuraScreen(
         AuraChatScreen(
             messages = chatMessages,
             onSendMessage = onSendChatMessage,
-            onVoiceButtonClick = onVoiceButtonClick,
+            onVoiceButtonClick = onChatVoiceButtonClick,
             onBack = { showingChat = false }
         )
     } else {
@@ -77,7 +77,9 @@ private fun AuraVoiceScreen(
     onVoiceButtonClick: () -> Unit,
     onChatClick: () -> Unit
 ) {
-    val isListening = voiceState == AuraVoiceState.LISTENING
+
+    val isListening =
+        voiceState == AuraVoiceState.LISTENING
 
     val accent = when (voiceState) {
         AuraVoiceState.IDLE -> Color(0xFF728BFF)
@@ -103,6 +105,7 @@ private fun AuraVoiceScreen(
                     )
                 )
         ) {
+
             Box(
                 modifier = Modifier
                     .size(360.dp)
@@ -120,9 +123,13 @@ private fun AuraVoiceScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 25.dp, vertical = 24.dp),
+                    .padding(
+                        horizontal = 25.dp,
+                        vertical = 24.dp
+                    ),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -130,6 +137,7 @@ private fun AuraVoiceScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+
                     Column {
                         Text(
                             text = "A U R A",
@@ -138,6 +146,7 @@ private fun AuraVoiceScreen(
                             fontWeight = FontWeight.Light,
                             letterSpacing = 7.sp
                         )
+
                         Text(
                             text = "PERSONAL AI ASSISTANT",
                             color = Color(0xFF8293B7),
@@ -146,7 +155,10 @@ private fun AuraVoiceScreen(
                         )
                     }
 
-                    Column(horizontalAlignment = Alignment.End) {
+                    Column(
+                        horizontalAlignment = Alignment.End
+                    ) {
+
                         Surface(
                             color = Color.White.copy(alpha = 0.07f),
                             shape = CircleShape
@@ -158,12 +170,18 @@ private fun AuraVoiceScreen(
                                 ),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
+
                                 Box(
                                     modifier = Modifier
                                         .size(6.dp)
-                                        .background(accent, CircleShape)
+                                        .background(
+                                            accent,
+                                            CircleShape
+                                        )
                                 )
+
                                 Spacer(Modifier.size(7.dp))
+
                                 Text(
                                     text = when (voiceState) {
                                         AuraVoiceState.IDLE -> "READY"
@@ -198,10 +216,12 @@ private fun AuraVoiceScreen(
                 AnimatedContent(
                     targetState = voiceState,
                     transitionSpec = {
-                        fadeIn(tween(350)) togetherWith fadeOut(tween(200))
+                        fadeIn(tween(350)) togetherWith
+                            fadeOut(tween(200))
                     },
                     label = "aura_status_transition"
                 ) { state ->
+
                     Text(
                         text = when (state) {
                             AuraVoiceState.IDLE -> "Estoy aquí"
@@ -229,12 +249,17 @@ private fun AuraVoiceScreen(
                 Spacer(Modifier.height(20.dp))
 
                 if (transcript.isNotBlank()) {
+
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         color = Color.White.copy(alpha = 0.07f),
                         shape = RoundedCornerShape(23.dp)
                     ) {
-                        Column(Modifier.padding(17.dp)) {
+
+                        Column(
+                            Modifier.padding(17.dp)
+                        ) {
+
                             Text(
                                 text = "TE HE ESCUCHADO",
                                 color = Color(0xFF91B9E8),
@@ -242,7 +267,9 @@ private fun AuraVoiceScreen(
                                 fontWeight = FontWeight.SemiBold,
                                 letterSpacing = 2.sp
                             )
+
                             Spacer(Modifier.height(8.dp))
+
                             Text(
                                 text = transcript,
                                 color = Color(0xFFEAF7FF),
@@ -251,6 +278,7 @@ private fun AuraVoiceScreen(
                             )
                         }
                     }
+
                     Spacer(Modifier.height(17.dp))
                 }
 
@@ -267,9 +295,10 @@ private fun AuraVoiceScreen(
                         contentColor = Color(0xFF081020)
                     )
                 ) {
+
                     Text(
                         text = if (isListening) {
-                            "DETENER ESCUCHA"
+                            "DETENER CONVERSACIÓN"
                         } else {
                             "HABLAR CON AURA"
                         },
