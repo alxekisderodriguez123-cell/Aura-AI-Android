@@ -23,8 +23,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -33,6 +33,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -46,8 +47,6 @@ fun AuraPlayerPanel(
     playback: AuraPlaybackController
 ) {
     var showQueue by remember { mutableStateOf(false) }
-
-    val hasTrack = playback.queue.isNotEmpty()
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -194,7 +193,7 @@ fun AuraPlayerPanel(
                     modifier = Modifier
                         .size(55.dp)
                         .clickable(
-                            enabled = hasTrack,
+                            enabled = playback.queue.isNotEmpty(),
                             onClick = playback::togglePlayback
                         ),
                     shape = CircleShape,
@@ -340,6 +339,8 @@ private fun AuraAlbumArtwork(
     uri: Uri?,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+
     val bitmap by produceState<Bitmap?>(
         initialValue = null,
         key1 = uri
@@ -349,10 +350,11 @@ private fun AuraAlbumArtwork(
                 if (uri == null) {
                     null
                 } else {
-                    val context = androidx.compose.ui.platform.LocalContext.current
-                    context.contentResolver.openInputStream(uri)?.use {
-                        BitmapFactory.decodeStream(it)
-                    }
+                    context.contentResolver
+                        .openInputStream(uri)
+                        ?.use { stream ->
+                            BitmapFactory.decodeStream(stream)
+                        }
                 }
             } catch (_: Exception) {
                 null
