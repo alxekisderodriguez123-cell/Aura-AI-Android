@@ -2,6 +2,7 @@ package com.aura.ai
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -50,6 +51,9 @@ class MainActivity : ComponentActivity() {
     private var continuousVoiceActive = false
     private var pendingContinuousMode = false
 
+    private var pendingMusicCommand: AuraCommand? = null
+    private var pendingMusicSpeakResponse = false
+
     private val microphonePermission =
         registerForActivityResult(
             ActivityResultContracts.RequestPermission()
@@ -70,10 +74,39 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+    private val audioPermission =
+        registerForActivityResult(
+            ActivityResultContracts.RequestPermission()
+        ) { granted ->
+
+            val command = pendingMusicCommand
+            val speakResponse = pendingMusicSpeakResponse
+
+            pendingMusicCommand = null
+            pendingMusicSpeakResponse = false
+
+            if (command != null) {
+                val result = if (granted) {
+                    actionEngine.execute(command)
+                } else {
+                    "No tengo permiso para consultar tu música local. " +
+                        "Voy a buscarla en YouTube Music."
+                }
+
+                if (granted) {
+                    finishResponse(result, speakResponse)
+                } else {
+                    val fallback = actionEngine.execute(
+                        command.copyForExternalMusic()
+                    )
+                    finishResponse(fallback, speakResponse)
+                }
+            }
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // App Check Debug se utiliza únicamente en la compilación debug.
         try {
             FirebaseAppCheck.getInstance()
                 .installAppCheckProviderFactory(
@@ -145,7 +178,6 @@ class MainActivity : ComponentActivity() {
         rawText: String,
         speakResponse: Boolean
     ) {
-
         val text = rawText.trim()
 
         if (text.isBlank()) return
@@ -162,27 +194,31 @@ class MainActivity : ComponentActivity() {
 
         val command = AuraCommandParser.parse(text)
 
-        // El token se procesa de forma independiente.
         if (command == AuraCommand.CopyAppCheckToken) {
-
             actionEngine.copyAppCheckToken { result ->
                 finishResponse(result, speakResponse)
             }
-
             return
         }
 
-        // Los comandos locales no necesitan Gemini.
         if (command != null) {
 
+            if (
+                command is AuraCommand.SearchYouTubeMusic &&
+                command.play &&
+                !hasAudioPermission()
+            ) {
+                pendingMusicCommand = command
+                pendingMusicSpeakResponse = speakResponse
+                audioPermission.launch(audioPermissionName())
+                return
+            }
+
             val result = actionEngine.execute(command)
-
             finishResponse(result, speakResponse)
-
             return
         }
 
-        // Si no es un comando local, consulta Gemini.
         mainScope.launch {
 
             voiceState = if (speakResponse) {
@@ -208,7 +244,6 @@ class MainActivity : ComponentActivity() {
                     "Error procesando mensaje",
                     e
                 )
-
                 "No pude procesar tu solicitud. Inténtalo otra vez."
             }
 
@@ -216,11 +251,25 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun hasAudioPermission(): Boolean {
+        return ContextCompat.checkSelfPermission(
+            this,
+            audioPermissionName()
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun audioPermissionName(): String {
+        return if (Build.VERSION.SDK_INT >= 33) {
+            Manifest.permission.READ_MEDIA_AUDIO
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+    }
+
     private fun finishResponse(
         responseText: String,
         speakResponse: Boolean
     ) {
-
         val response = ChatMessage(
             text = responseText,
             isUser = false
@@ -245,7 +294,6 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleVoiceButton() {
-
         if (continuousVoiceActive) {
             continuousVoiceActive = false
             voiceController?.stopConversation()
@@ -256,7 +304,6 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleChatVoiceButton() {
-
         if (
             !continuousVoiceActive &&
             voiceState == AuraVoiceState.LISTENING
@@ -266,12 +313,10 @@ class MainActivity : ComponentActivity() {
         }
 
         continuousVoiceActive = false
-
         requestMicrophone(continuous = false)
     }
 
     private fun requestMicrophone(continuous: Boolean) {
-
         pendingContinuousMode = continuous
 
         val granted = ContextCompat.checkSelfPermission(
@@ -280,7 +325,6 @@ class MainActivity : ComponentActivity() {
         ) == PackageManager.PERMISSION_GRANTED
 
         if (granted) {
-
             if (continuous) {
                 continuousVoiceActive = true
                 voiceController?.startConversation()
@@ -288,7 +332,6 @@ class MainActivity : ComponentActivity() {
                 continuousVoiceActive = false
                 voiceController?.startSingleListening()
             }
-
         } else {
             microphonePermission.launch(
                 Manifest.permission.RECORD_AUDIO
@@ -297,7 +340,6 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-
         continuousVoiceActive = false
 
         voiceController?.release()
@@ -310,5 +352,21 @@ class MainActivity : ComponentActivity() {
         }
 
         super.onDestroy()
+    }
+}
+
+/*
+ * La orden de reproducción se conserva, pero el motor recibe una búsqueda
+ * externa cuando el usuario deniega el permiso de biblioteca local.
+ */
+private fun AuraCommand.copyForExternalMusic(): AuraCommand {
+    return when (this) {
+        is AuraCommand.SearchYouTubeMusic ->
+            AuraCommand.SearchYouTubeMusic(
+                query = query,
+                play = true
+            )
+
+        else -> this
     }
 }
