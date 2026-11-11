@@ -1,3 +1,4 @@
+
 package com.aura.ai.assistant
 
 import android.app.Service
@@ -93,7 +94,7 @@ class AuraWakeWordService : Service(), RecognitionListener {
 
             } catch (error: Exception) {
                 Log.e(TAG, "Error cargando Vosk", error)
-                scheduleRecognitionRestart()
+                stopSelf()
             }
         }
     }
@@ -110,12 +111,13 @@ class AuraWakeWordService : Service(), RecognitionListener {
                 GRAMMAR
             )
 
+            recognizer = newRecognizer
+
             val newSpeechService = SpeechService(
                 newRecognizer,
                 SAMPLE_RATE
             )
 
-            recognizer = newRecognizer
             speechService = newSpeechService
 
             val started = newSpeechService.startListening(this)
