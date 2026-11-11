@@ -1,5 +1,6 @@
 package com.aura.ai.assistant
 
+import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.BitmapFactory
 import android.graphics.Color
@@ -11,7 +12,6 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.view.Gravity
 import android.view.MotionEvent
-import android.view.View
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
@@ -30,6 +30,7 @@ class AuraVoiceOverlayView(
     private var isSpeaking = false
     private var downX = 0f
     private var downY = 0f
+    private var pulseAnimator: ValueAnimator? = null
 
     private val swipeThreshold =
         55f * resources.displayMetrics.density
@@ -60,7 +61,6 @@ class AuraVoiceOverlayView(
             orbView.drawable as? AnimatedImageDrawable
 
         orbView.setOnTouchListener { view, event ->
-
             when (event.actionMasked) {
 
                 MotionEvent.ACTION_DOWN -> {
@@ -70,7 +70,6 @@ class AuraVoiceOverlayView(
                 }
 
                 MotionEvent.ACTION_UP -> {
-
                     val deltaX = event.rawX - downX
                     val deltaY = event.rawY - downY
 
@@ -140,21 +139,17 @@ class AuraVoiceOverlayView(
     private fun loadOrbDrawable(): Drawable? {
         return try {
             if (Build.VERSION.SDK_INT >= 28) {
-
                 ImageDecoder.decodeDrawable(
                     ImageDecoder.createSource(
                         resources,
                         R.raw.aura_orb
                     )
                 )
-
             } else {
-
                 val bitmap = BitmapFactory.decodeResource(
                     resources,
                     R.raw.aura_orb
                 )
-
                 BitmapDrawable(resources, bitmap)
             }
         } catch (error: Exception) {
@@ -168,42 +163,33 @@ class AuraVoiceOverlayView(
     }
 
     fun setSpeaking(speaking: Boolean) {
-
         if (isSpeaking == speaking) return
 
         isSpeaking = speaking
 
-        orbView.animate().cancel()
+        pulseAnimator?.cancel()
+        pulseAnimator = null
 
         if (speaking) {
+            pulseAnimator = ValueAnimator.ofFloat(
+                1f,
+                1.085f
+            ).apply {
+                duration = 480L
+                repeatCount = ValueAnimator.INFINITE
+                repeatMode = ValueAnimator.REVERSE
 
-            orbView.animate()
-                .scaleX(1.09f)
-                .scaleY(1.09f)
-                .setDuration(420L)
-                .withEndAction {
-                    if (isSpeaking) {
-                        orbView.animate()
-                            .scaleX(1f)
-                            .scaleY(1f)
-                            .setDuration(420L)
-                            .withEndAction {
-                                if (isSpeaking) {
-                                    setSpeaking(true)
-                                }
-                            }
-                            .start()
-                    }
+                addUpdateListener { animator ->
+                    val scale = animator.animatedValue as Float
+                    orbView.scaleX = scale
+                    orbView.scaleY = scale
                 }
-                .start()
 
+                start()
+            }
         } else {
-
-            orbView.animate()
-                .scaleX(1f)
-                .scaleY(1f)
-                .setDuration(220L)
-                .start()
+            orbView.scaleX = 1f
+            orbView.scaleY = 1f
         }
     }
 
@@ -215,13 +201,16 @@ class AuraVoiceOverlayView(
         ) {
             animatedOrb.repeatCount =
                 AnimatedImageDrawable.REPEAT_INFINITE
-
             animatedOrb.start()
         }
     }
 
     fun stopOrbAnimation() {
+        pulseAnimator?.cancel()
+        pulseAnimator = null
+
         animatedOrb?.stop()
+
         orbView.animate().cancel()
         orbView.scaleX = 1f
         orbView.scaleY = 1f
