@@ -4,23 +4,16 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
-
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
-
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
 
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-
     <uses-permission
         android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
-
-    <uses-permission
-        android:name="com.android.alarm.permission.SET_ALARM" />
-
-    <uses-permission
-        android:name="android.permission.WRITE_SETTINGS" />
+    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
+    <uses-permission android:name="android.permission.WRITE_SETTINGS" />
 
     <uses-feature
         android:name="android.hardware.microphone"
@@ -37,7 +30,6 @@
         <intent>
             <action android:name="android.speech.RecognitionService" />
         </intent>
-
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
@@ -50,6 +42,7 @@
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
+        <!-- Actividad principal -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -63,7 +56,21 @@
 
         </activity>
 
-        <!-- Servicio multimedia de Aura -->
+        <!-- Entrada estándar de Android para el rol de asistente -->
+        <activity
+            android:name=".assistant.AuraAssistActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask">
+
+            <intent-filter>
+                <action android:name="android.intent.action.ASSIST" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+
+        </activity>
+
+        <!-- Acceso multimedia -->
         <service
             android:name=".media.AuraPlaybackService"
             android:exported="true"
@@ -76,11 +83,12 @@
 
         </service>
 
-        <!-- Servicio de interacción por voz -->
+        <!-- Servicio principal del asistente -->
         <service
             android:name=".assistant.AuraVoiceInteractionService"
             android:permission="android.permission.BIND_VOICE_INTERACTION"
-            android:exported="true">
+            android:exported="true"
+            android:label="Aura">
 
             <intent-filter>
                 <action android:name="android.service.voice.VoiceInteractionService" />
@@ -91,10 +99,16 @@
                 android:resource="@xml/aura_voice_interaction" />
         </service>
 
+        <!-- Sesión visual del asistente -->
         <service
             android:name=".assistant.AuraVoiceInteractionSessionService"
             android:permission="android.permission.BIND_VOICE_INTERACTION"
             android:exported="true" />
+
+        <!-- Acciones directas publicadas por Aura -->
+        <meta-data
+            android:name="android.app.shortcuts"
+            android:resource="@xml/shortcuts" />
 
     </application>
 
