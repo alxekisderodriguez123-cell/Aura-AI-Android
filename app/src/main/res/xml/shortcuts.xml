@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <shortcut
+        android:shortcutId="aura_voice"
+        android:enabled="true"
+        android:icon="@android:drawable/ic_btn_speak_now"
+        android:shortcutShortLabel="@string/aura_voice_shortcut_short"
+        android:shortcutLongLabel="@string/aura_voice_shortcut_long">
+
+        <intent
+            android:action="com.aura.ai.action.ONE_TAP_VOICE"
+            android:targetPackage="com.aura.ai"
+            android:targetClass="com.aura.ai.MainActivity" />
+
+        <categories android:name="android.shortcut.conversation" />
+
+    </shortcut>
+
+</shortcuts>
