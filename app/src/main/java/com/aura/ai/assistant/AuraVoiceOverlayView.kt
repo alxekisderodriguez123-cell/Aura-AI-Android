@@ -1,200 +1,230 @@
-
 package com.aura.ai.assistant
 
 import android.content.Context
 import android.graphics.BitmapFactory
+import android.graphics.Color
 import android.graphics.ImageDecoder
 import android.graphics.drawable.AnimatedImageDrawable
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
+import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
+import android.widget.FrameLayout
 import android.widget.ImageView
-import android.widget.LinearLayout
 import android.widget.TextView
-import android.graphics.Color
-import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
 import com.aura.ai.R
+import kotlin.math.abs
 
 class AuraVoiceOverlayView(
     context: Context,
+    private val onTapWhileSpeaking: () -> Unit,
     private val onClose: () -> Unit
-) : LinearLayout(context) {
+) : FrameLayout(context) {
 
-    private val statusView: TextView
-    private val transcriptView: TextView
     private val orbView: ImageView
     private val animatedOrb: AnimatedImageDrawable?
 
+    private var isSpeaking = false
+    private var downX = 0f
+    private var downY = 0f
+
+    private val swipeThreshold =
+        55f * resources.displayMetrics.density
+
     init {
-        orientation = VERTICAL
-        gravity = Gravity.CENTER
-        setPadding(dp(22), dp(18), dp(22), dp(22))
-
-        background = GradientDrawable().apply {
-            colors = intArrayOf(
-                Color.rgb(32, 25, 66),
-                Color.rgb(15, 15, 35)
-            )
-            orientation = GradientDrawable.Orientation.TOP_BOTTOM
-            cornerRadii = floatArrayOf(
-                dp(28).toFloat(), dp(28).toFloat(),
-                dp(28).toFloat(), dp(28).toFloat(),
-                dp(28).toFloat(), dp(28).toFloat(),
-                dp(28).toFloat(), dp(28).toFloat()
-            )
-            setStroke(dp(1), Color.rgb(112, 67, 190))
-        }
-
-        val header = TextView(context).apply {
-            text = "A U R A"
-            textSize = 13f
-            letterSpacing = 0.32f
-            setTextColor(Color.rgb(95, 224, 255))
-            typeface = Typeface.create(
-                "sans-serif-medium",
-                Typeface.BOLD
-            )
-            gravity = Gravity.CENTER
-        }
-
-        addView(
-            header,
-            LayoutParams(
-                LayoutParams.MATCH_PARENT,
-                dp(28)
-            )
-        )
+        setBackgroundColor(Color.TRANSPARENT)
+        clipChildren = false
+        clipToPadding = false
 
         orbView = ImageView(context).apply {
             scaleType = ImageView.ScaleType.FIT_CENTER
-            val drawable = loadOrbDrawable()
-            setImageDrawable(drawable)
+            setImageDrawable(loadOrbDrawable())
+            contentDescription = "Aura"
+            isClickable = true
+            isFocusable = true
         }
-
-        animatedOrb = orbView.drawable as? AnimatedImageDrawable
 
         addView(
             orbView,
-            LayoutParams(dp(154), dp(154)).apply {
-                gravity = Gravity.CENTER
-                topMargin = dp(8)
-                bottomMargin = dp(8)
+            LayoutParams(
+                dp(126),
+                dp(126),
+                Gravity.CENTER
+            )
+        )
+
+        animatedOrb =
+            orbView.drawable as? AnimatedImageDrawable
+
+        orbView.setOnTouchListener { view, event ->
+
+            when (event.actionMasked) {
+
+                MotionEvent.ACTION_DOWN -> {
+                    downX = event.rawX
+                    downY = event.rawY
+                    true
+                }
+
+                MotionEvent.ACTION_UP -> {
+
+                    val deltaX = event.rawX - downX
+                    val deltaY = event.rawY - downY
+
+                    val horizontalSwipe =
+                        abs(deltaX) > swipeThreshold
+
+                    val downwardSwipe =
+                        deltaY > swipeThreshold
+
+                    if (horizontalSwipe || downwardSwipe) {
+                        onClose()
+                    } else {
+                        view.performClick()
+                    }
+
+                    true
+                }
+
+                MotionEvent.ACTION_CANCEL -> true
+
+                else -> true
             }
-        )
-
-        statusView = TextView(context).apply {
-            text = "Conectando..."
-            textSize = 17f
-            gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
-            typeface = Typeface.create(
-                "sans-serif",
-                Typeface.BOLD
-            )
         }
 
-        addView(
-            statusView,
-            LayoutParams(
-                LayoutParams.MATCH_PARENT,
-                dp(32)
-            )
-        )
-
-        transcriptView = TextView(context).apply {
-            text = "Estoy aquí."
-            textSize = 14f
-            gravity = Gravity.CENTER
-            setTextColor(Color.rgb(205, 198, 230))
-            maxLines = 3
-            setPadding(dp(8), dp(4), dp(8), dp(4))
+        orbView.setOnClickListener {
+            if (isSpeaking) {
+                onTapWhileSpeaking()
+            }
         }
-
-        addView(
-            transcriptView,
-            LayoutParams(
-                LayoutParams.MATCH_PARENT,
-                LayoutParams.WRAP_CONTENT
-            )
-        )
 
         val closeButton = TextView(context).apply {
-            text = "Cerrar"
-            textSize = 14f
+            text = "×"
+            textSize = 23f
             gravity = Gravity.CENTER
-            setTextColor(Color.rgb(225, 215, 255))
+            setTextColor(Color.WHITE)
+            contentDescription = "Cerrar Aura"
+
             background = GradientDrawable().apply {
-                setColor(Color.rgb(54, 43, 91))
-                cornerRadius = dp(24).toFloat()
-                setStroke(dp(1), Color.rgb(112, 67, 190))
+                shape = GradientDrawable.OVAL
+                setColor(Color.argb(185, 30, 25, 48))
+                setStroke(
+                    dp(1),
+                    Color.argb(150, 150, 115, 220)
+                )
             }
-            setPadding(dp(28), dp(10), dp(28), dp(10))
-            setOnClickListener { onClose() }
+
+            setOnClickListener {
+                onClose()
+            }
         }
 
         addView(
             closeButton,
             LayoutParams(
-                LayoutParams.WRAP_CONTENT,
-                dp(44)
+                dp(32),
+                dp(32),
+                Gravity.TOP or Gravity.END
             ).apply {
-                gravity = Gravity.CENTER
-                topMargin = dp(12)
+                topMargin = dp(5)
+                marginEnd = dp(5)
             }
         )
 
-        animatedOrb?.let {
-            it.repeatCount = AnimatedImageDrawable.REPEAT_INFINITE
-            it.start()
-        }
+        startOrbAnimation()
     }
 
     private fun loadOrbDrawable(): Drawable? {
         return try {
             if (Build.VERSION.SDK_INT >= 28) {
+
                 ImageDecoder.decodeDrawable(
                     ImageDecoder.createSource(
                         resources,
                         R.raw.aura_orb
                     )
                 )
+
             } else {
+
                 val bitmap = BitmapFactory.decodeResource(
                     resources,
                     R.raw.aura_orb
                 )
+
                 BitmapDrawable(resources, bitmap)
             }
-        } catch (_: Exception) {
+        } catch (error: Exception) {
+            android.util.Log.e(
+                "AuraOverlay",
+                "No se pudo cargar la esfera",
+                error
+            )
             null
         }
     }
 
-    fun setStatus(value: String) {
-        statusView.text = value
-    }
-
-    fun setTranscript(value: String) {
-        transcriptView.text = value
-    }
-
     fun setSpeaking(speaking: Boolean) {
+
+        if (isSpeaking == speaking) return
+
+        isSpeaking = speaking
+
         orbView.animate().cancel()
 
-        val target = if (speaking) 1.07f else 1f
+        if (speaking) {
 
-        orbView.animate()
-            .scaleX(target)
-            .scaleY(target)
-            .setDuration(if (speaking) 420L else 260L)
-            .start()
+            orbView.animate()
+                .scaleX(1.09f)
+                .scaleY(1.09f)
+                .setDuration(420L)
+                .withEndAction {
+                    if (isSpeaking) {
+                        orbView.animate()
+                            .scaleX(1f)
+                            .scaleY(1f)
+                            .setDuration(420L)
+                            .withEndAction {
+                                if (isSpeaking) {
+                                    setSpeaking(true)
+                                }
+                            }
+                            .start()
+                    }
+                }
+                .start()
+
+        } else {
+
+            orbView.animate()
+                .scaleX(1f)
+                .scaleY(1f)
+                .setDuration(220L)
+                .start()
+        }
+    }
+
+    fun startOrbAnimation() {
+        if (
+            Build.VERSION.SDK_INT >= 28 &&
+            animatedOrb != null &&
+            !animatedOrb.isRunning
+        ) {
+            animatedOrb.repeatCount =
+                AnimatedImageDrawable.REPEAT_INFINITE
+
+            animatedOrb.start()
+        }
     }
 
     fun stopOrbAnimation() {
         animatedOrb?.stop()
+        orbView.animate().cancel()
+        orbView.scaleX = 1f
+        orbView.scaleY = 1f
     }
 
     private fun dp(value: Int): Int =
