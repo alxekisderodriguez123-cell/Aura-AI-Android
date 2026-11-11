@@ -4,6 +4,8 @@ import android.content.Context
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.service.voice.VoiceInteractionSession
 import android.view.Gravity
 import android.view.View
@@ -15,6 +17,7 @@ class AuraVoiceInteractionSession(
 ) : VoiceInteractionSession(context) {
 
     private val appContext = context.applicationContext
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     private var overlay: AuraVoiceOverlayView? = null
     private var runtime: AuraVoiceRuntime? = null
@@ -68,6 +71,9 @@ class AuraVoiceInteractionSession(
     ) {
         super.onShow(args, showFlags)
 
+        mainHandler.removeCallbacks(restartWakeWordRunnable)
+        AuraWakeWordController.stop(appContext)
+
         overlay?.visibility = View.VISIBLE
         overlay?.startOrbAnimation()
         overlay?.animateEntrance()
@@ -105,13 +111,26 @@ class AuraVoiceInteractionSession(
         super.onHide()
 
         if (AuraWakeWordPreferences.isEnabled(appContext)) {
-            overlay?.postDelayed({
-                AuraWakeWordController.start(appContext)
-            }, 500)
+            mainHandler.removeCallbacks(restartWakeWordRunnable)
+
+            mainHandler.postDelayed(
+                restartWakeWordRunnable,
+                700L
+            )
+        }
+    }
+
+    private val restartWakeWordRunnable = Runnable {
+        if (
+            AuraWakeWordPreferences.isEnabled(appContext)
+        ) {
+            AuraWakeWordController.start(appContext)
         }
     }
 
     override fun onDestroy() {
+        mainHandler.removeCallbacks(restartWakeWordRunnable)
+
         runtime?.release()
         runtime = null
 
@@ -121,9 +140,10 @@ class AuraVoiceInteractionSession(
         super.onDestroy()
     }
 
-    private fun dp(value: Int): Int =
-        (
+    private fun dp(value: Int): Int {
+        return (
             value *
                 appContext.resources.displayMetrics.density
             ).toInt()
+    }
 }
