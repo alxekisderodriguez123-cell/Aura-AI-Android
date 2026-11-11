@@ -2,6 +2,7 @@
 package com.aura.ai.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,15 +16,13 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -35,12 +34,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.platform.LocalFocusManager
 import com.aura.ai.chat.ChatMessage
+
+private val ChatBackground = Color(0xFF101329)
+private val ChatPanel = Color(0xFF211D3D)
+private val ChatPurple = Color(0xFF9D55FF)
+private val ChatPink = Color(0xFFF04FAD)
+private val ChatCyan = Color(0xFF39DDF5)
+private val ChatWhite = Color(0xFFF2F3FF)
+private val ChatMuted = Color(0xFFB7BBD5)
 
 @Composable
 fun AuraChatScreen(
@@ -50,16 +58,17 @@ fun AuraChatScreen(
     onBack: () -> Unit
 ) {
     var input by remember { mutableStateOf("") }
+
     val listState = rememberLazyListState()
     val focusManager = LocalFocusManager.current
 
     fun send() {
         val value = input.trim()
-        if (value.isNotEmpty()) {
-            onSendMessage(value)
-            input = ""
-            focusManager.clearFocus()
-        }
+        if (value.isBlank()) return
+
+        onSendMessage(value)
+        input = ""
+        focusManager.clearFocus()
     }
 
     LaunchedEffect(messages.size) {
@@ -70,7 +79,7 @@ fun AuraChatScreen(
 
     Surface(
         modifier = Modifier.fillMaxSize(),
-        color = Color(0xFF080B19)
+        color = ChatBackground
     ) {
         Column(
             modifier = Modifier
@@ -78,47 +87,89 @@ fun AuraChatScreen(
                 .background(
                     Brush.verticalGradient(
                         listOf(
-                            Color(0xFF151F3D),
-                            Color(0xFF0B1228),
-                            Color(0xFF070A16)
+                            Color(0xFF1A1736),
+                            Color(0xFF111329),
+                            Color(0xFF0B0D1B)
                         )
                     )
                 )
                 .padding(horizontal = 17.dp)
         ) {
+            // Barra superior
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 18.dp, bottom = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                    .padding(top = 13.dp, bottom = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Surface(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clickable(onClick = onBack),
+                    shape = CircleShape,
+                    color = ChatPanel
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        AuraIcon(
+                            AuraIconType.BACK,
+                            tint = ChatWhite,
+                            size = 21.dp
+                        )
+                    }
+                }
+
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
                     Text(
-                        text = "A U R A",
-                        color = Color(0xFFF0F7FF),
-                        fontSize = 24.sp,
+                        "A U R A",
+                        color = ChatWhite,
+                        fontSize = 19.sp,
                         fontWeight = FontWeight.Light,
-                        letterSpacing = 6.sp
+                        letterSpacing = 5.sp
                     )
+
                     Text(
-                        text = "CONVERSACIONES",
-                        color = Color(0xFF9BAFD2),
+                        "CONVERSACIÓN",
+                        color = ChatMuted,
                         fontSize = 9.sp,
-                        letterSpacing = 2.sp
+                        letterSpacing = 1.8.sp
                     )
                 }
 
-                TextButton(onClick = onBack) {
-                    Text(
-                        text = "←  VOLVER",
-                        color = Color(0xFFB8CCFF),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                Surface(
+                    shape = CircleShape,
+                    color = ChatPurple.copy(alpha = 0.17f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(
+                            horizontal = 10.dp,
+                            vertical = 7.dp
+                        ),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .background(ChatCyan, CircleShape)
+                        )
+
+                        Text(
+                            "ONLINE",
+                            color = ChatWhite,
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.8.sp
+                        )
+                    }
                 }
             }
 
+            // Historial: el desplazamiento se limita al chat.
             if (messages.isEmpty()) {
                 Box(
                     modifier = Modifier
@@ -126,18 +177,35 @@ fun AuraChatScreen(
                         .fillMaxWidth(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(11.dp)
+                    ) {
+                        Surface(
+                            modifier = Modifier.size(62.dp),
+                            shape = CircleShape,
+                            color = ChatPurple.copy(alpha = 0.17f)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                AuraIcon(
+                                    AuraIconType.SPARKLES,
+                                    tint = ChatCyan,
+                                    size = 29.dp
+                                )
+                            }
+                        }
+
                         Text(
-                            text = "Hablemos.",
-                            color = Color(0xFFF0F6FF),
-                            fontSize = 29.sp,
+                            "¿En qué puedo ayudarte?",
+                            color = ChatWhite,
+                            fontSize = 21.sp,
                             fontWeight = FontWeight.SemiBold
                         )
+
                         Text(
-                            text = "Puedes escribir o hablar conmigo.",
-                            color = Color(0xFF9BAECC),
-                            fontSize = 14.sp,
-                            modifier = Modifier.padding(top = 10.dp)
+                            "Escribe un mensaje o háblame.",
+                            color = ChatMuted,
+                            fontSize = 13.sp
                         )
                     }
                 }
@@ -147,32 +215,37 @@ fun AuraChatScreen(
                         .weight(1f)
                         .fillMaxWidth(),
                     state = listState,
-                    verticalArrangement = Arrangement.spacedBy(17.dp)
+                    verticalArrangement = Arrangement.spacedBy(21.dp)
                 ) {
                     items(
                         items = messages,
                         key = { it.id }
                     ) { message ->
-                        ChatBubble(message)
+                        if (message.isUser) {
+                            UserMessage(message.text)
+                        } else {
+                            AuraMessage(message.text)
+                        }
                     }
                 }
             }
 
+            // Campo de escritura y acciones
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .imePadding()
-                    .padding(top = 12.dp, bottom = 8.dp),
+                    .padding(top = 10.dp, bottom = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Surface(
                     modifier = Modifier.weight(1f),
-                    color = Color(0xFF151D35),
-                    shape = RoundedCornerShape(22.dp),
+                    color = ChatPanel,
+                    shape = RoundedCornerShape(25.dp),
                     border = androidx.compose.foundation.BorderStroke(
                         1.dp,
-                        Color(0xFF788BFF).copy(alpha = 0.65f)
+                        ChatPurple.copy(alpha = 0.45f)
                     )
                 ) {
                     OutlinedTextField(
@@ -181,18 +254,18 @@ fun AuraChatScreen(
                         modifier = Modifier.fillMaxWidth(),
                         placeholder = {
                             Text(
-                                "Escribe tu mensaje...",
-                                color = Color(0xFF9EACC8),
+                                "Escribe a Aura...",
+                                color = ChatMuted,
                                 fontSize = 14.sp
                             )
                         },
-                        textStyle = androidx.compose.ui.text.TextStyle(
-                            color = Color(0xFFF4F7FF),
-                            fontSize = 16.sp,
-                            lineHeight = 22.sp
+                        textStyle = TextStyle(
+                            color = ChatWhite,
+                            fontSize = 15.sp,
+                            lineHeight = 21.sp
                         ),
                         maxLines = 4,
-                        shape = RoundedCornerShape(22.dp),
+                        shape = RoundedCornerShape(25.dp),
                         keyboardOptions = KeyboardOptions(
                             imeAction = ImeAction.Send
                         ),
@@ -200,134 +273,141 @@ fun AuraChatScreen(
                             onSend = { send() }
                         ),
                         colors = TextFieldDefaults.colors(
-                            focusedTextColor = Color(0xFFF4F7FF),
-                            unfocusedTextColor = Color(0xFFF4F7FF),
+                            focusedTextColor = ChatWhite,
+                            unfocusedTextColor = ChatWhite,
                             focusedContainerColor = Color.Transparent,
                             unfocusedContainerColor = Color.Transparent,
                             focusedIndicatorColor = Color.Transparent,
                             unfocusedIndicatorColor = Color.Transparent,
-                            cursorColor = Color(0xFF9CB5FF),
-                            focusedPlaceholderColor = Color(0xFF9EACC8),
-                            unfocusedPlaceholderColor = Color(0xFF9EACC8)
+                            cursorColor = ChatCyan,
+                            focusedPlaceholderColor = ChatMuted,
+                            unfocusedPlaceholderColor = ChatMuted
                         )
                     )
                 }
 
-                Button(
-                    onClick = onVoiceButtonClick,
-                    modifier = Modifier.widthIn(min = 54.dp),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF26365B),
-                        contentColor = Color(0xFFBDEEFF)
+                Surface(
+                    modifier = Modifier.size(48.dp).clickable(
+                        onClick = onVoiceButtonClick
                     ),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                        horizontal = 11.dp,
-                        vertical = 17.dp
-                    )
+                    shape = CircleShape,
+                    color = ChatPanel
                 ) {
-                    Text(
-                        text = "MIC",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Box(contentAlignment = Alignment.Center) {
+                        AuraIcon(
+                            AuraIconType.MIC,
+                            tint = ChatCyan,
+                            size = 22.dp
+                        )
+                    }
                 }
 
-                Button(
-                    onClick = { send() },
-                    enabled = input.isNotBlank(),
-                    modifier = Modifier.widthIn(min = 62.dp),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF7189FF),
-                        contentColor = Color.White,
-                        disabledContainerColor = Color(0xFF303A59),
-                        disabledContentColor = Color(0xFF8490AC)
-                    ),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                        horizontal = 12.dp,
-                        vertical = 17.dp
-                    )
+                Surface(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clickable(
+                            enabled = input.isNotBlank(),
+                            onClick = { send() }
+                        ),
+                    shape = CircleShape,
+                    color = if (input.isNotBlank()) {
+                        ChatPurple
+                    } else {
+                        ChatPanel
+                    }
                 ) {
-                    Text(
-                        text = "ENVIAR",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Box(contentAlignment = Alignment.Center) {
+                        AuraIcon(
+                            AuraIconType.SEND,
+                            tint = if (input.isNotBlank()) {
+                                Color.White
+                            } else {
+                                ChatMuted.copy(alpha = 0.55f)
+                            },
+                            size = 21.dp
+                        )
+                    }
                 }
             }
+        }
+    }
+}
 
+@Composable
+private fun UserMessage(text: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.End
+    ) {
+        Surface(
+            modifier = Modifier.widthIn(max = 310.dp),
+            color = Color(0xFF49316F),
+            shape = RoundedCornerShape(
+                topStart = 21.dp,
+                topEnd = 21.dp,
+                bottomStart = 21.dp,
+                bottomEnd = 6.dp
+            ),
+            border = androidx.compose.foundation.BorderStroke(
+                1.dp,
+                ChatPurple.copy(alpha = 0.35f)
+            )
+        ) {
             Text(
-                text = "AURA · CONVERSACIÓN LOCAL",
-                color = Color(0xFF71809F),
-                fontSize = 8.sp,
-                letterSpacing = 1.5.sp,
-                modifier = Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .padding(bottom = 8.dp)
+                text = text,
+                color = Color.White,
+                fontSize = 15.sp,
+                lineHeight = 23.sp,
+                modifier = Modifier.padding(
+                    horizontal = 16.dp,
+                    vertical = 12.dp
+                )
             )
         }
     }
 }
 
 @Composable
-private fun ChatBubble(message: ChatMessage) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = if (message.isUser) {
-            Arrangement.End
-        } else {
-            Arrangement.Start
-        }
+private fun AuraMessage(text: String) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 3.dp, end = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(9.dp)
     ) {
-        Column(
-            modifier = Modifier.widthIn(max = 320.dp),
-            horizontalAlignment = if (message.isUser) {
-                Alignment.End
-            } else {
-                Alignment.Start
-            }
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            Surface(
+                modifier = Modifier.size(25.dp),
+                shape = CircleShape,
+                color = ChatPurple.copy(alpha = 0.25f)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    AuraIcon(
+                        AuraIconType.SPARKLES,
+                        tint = ChatCyan,
+                        size = 14.dp
+                    )
+                }
+            }
+
             Text(
-                text = if (message.isUser) "TÚ" else "AURA",
-                color = if (message.isUser) {
-                    Color(0xFFB5C7FF)
-                } else {
-                    Color(0xFF80E8F3)
-                },
+                "AURA",
+                color = ChatCyan,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
-                letterSpacing = 1.7.sp,
-                modifier = Modifier.padding(
-                    horizontal = 10.dp,
-                    vertical = 5.dp
-                )
+                letterSpacing = 1.6.sp
             )
-
-            Surface(
-                color = if (message.isUser) {
-                    Color(0xFF344B91)
-                } else {
-                    Color(0xFF202D4A)
-                },
-                shape = RoundedCornerShape(
-                    topStart = 22.dp,
-                    topEnd = 22.dp,
-                    bottomStart = if (message.isUser) 22.dp else 7.dp,
-                    bottomEnd = if (message.isUser) 7.dp else 22.dp
-                )
-            ) {
-                Text(
-                    text = message.text,
-                    color = Color(0xFFF1F6FF),
-                    fontSize = 15.sp,
-                    lineHeight = 23.sp,
-                    modifier = Modifier.padding(
-                        horizontal = 17.dp,
-                        vertical = 14.dp
-                    )
-                )
-            }
         }
+
+        Text(
+            text = text,
+            color = ChatWhite,
+            fontSize = 15.sp,
+            lineHeight = 24.sp,
+            modifier = Modifier.padding(start = 33.dp)
+        )
     }
 }
