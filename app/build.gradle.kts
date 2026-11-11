@@ -39,7 +39,6 @@ android {
         applicationId = "com.aura.ai"
         minSdk = 26
         targetSdk = 36
-
         versionCode = 3
         versionName = "0.4.0"
 
@@ -104,12 +103,14 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:35.1.0"))
     implementation("com.google.firebase:firebase-ai")
 
-    debugImplementation(
-        "com.google.firebase:firebase-appcheck-debug"
-    )
+    implementation("com.alphacephei:vosk-android:0.3.75")
 
     implementation(
         "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2"
+    )
+
+    debugImplementation(
+        "com.google.firebase:firebase-appcheck-debug"
     )
 
     debugImplementation(libs.androidx.compose.ui.tooling)
