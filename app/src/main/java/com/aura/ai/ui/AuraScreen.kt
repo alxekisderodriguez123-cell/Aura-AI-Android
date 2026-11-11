@@ -1,11 +1,11 @@
 package com.aura.ai.ui
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,15 +16,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -36,15 +31,25 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.platform.LocalContext
 import com.aura.ai.chat.ChatMessage
 import com.aura.ai.media.AuraPlaybackController
 import com.aura.ai.voice.AuraVoiceState
 import kotlinx.coroutines.delay
+
+private val AuraBackground = Color(0xFF101329)
+private val AuraPanel = Color(0xFF211D3D)
+private val AuraPanelLight = Color(0xFF30234F)
+private val AuraPurple = Color(0xFF9D55FF)
+private val AuraPink = Color(0xFFF04FAD)
+private val AuraCyan = Color(0xFF39DDF5)
+private val AuraBlue = Color(0xFF438AFF)
+private val AuraWhite = Color(0xFFF2F3FF)
+private val AuraMuted = Color(0xFFB7BBD5)
 
 @Composable
 fun AuraScreen(
@@ -89,7 +94,6 @@ fun AuraScreen(
     } else {
         AuraVoiceScreen(
             voiceState = voiceState,
-            transcript = transcript,
             message = message,
             playback = playback,
             assistantRoleHeld = assistantRoleHeld,
@@ -103,7 +107,6 @@ fun AuraScreen(
 @Composable
 private fun AuraVoiceScreen(
     voiceState: AuraVoiceState,
-    transcript: String,
     message: String,
     playback: AuraPlaybackController,
     assistantRoleHeld: Boolean,
@@ -111,19 +114,23 @@ private fun AuraVoiceScreen(
     onChatClick: () -> Unit,
     onRequestAssistantRole: () -> Unit
 ) {
-    val isListening =
-        voiceState == AuraVoiceState.LISTENING
-
     val accent = when (voiceState) {
-        AuraVoiceState.IDLE -> Color(0xFF728BFF)
-        AuraVoiceState.LISTENING -> Color(0xFF64E8FF)
-        AuraVoiceState.PROCESSING -> Color(0xFFB18BFF)
-        AuraVoiceState.SPEAKING -> Color(0xFF83D9FF)
+        AuraVoiceState.IDLE -> AuraPurple
+        AuraVoiceState.LISTENING -> AuraCyan
+        AuraVoiceState.PROCESSING -> AuraPink
+        AuraVoiceState.SPEAKING -> AuraBlue
+    }
+
+    val status = when (voiceState) {
+        AuraVoiceState.IDLE -> "LISTA PARA AYUDARTE"
+        AuraVoiceState.LISTENING -> "TE ESTOY ESCUCHANDO"
+        AuraVoiceState.PROCESSING -> "ESTOY PENSANDO"
+        AuraVoiceState.SPEAKING -> "ESTOY HABLANDO"
     }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
-        color = Color(0xFF070A16)
+        color = AuraBackground
     ) {
         Box(
             modifier = Modifier
@@ -131,281 +138,268 @@ private fun AuraVoiceScreen(
                 .background(
                     Brush.verticalGradient(
                         listOf(
-                            Color(0xFF111B35),
-                            Color(0xFF090E20),
-                            Color(0xFF070A16)
+                            Color(0xFF191735),
+                            Color(0xFF111329),
+                            Color(0xFF0B0D1B)
                         )
                     )
                 )
+                .padding(horizontal = 19.dp, vertical = 12.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .size(360.dp)
-                    .align(Alignment.TopCenter)
-                    .background(
-                        Brush.radialGradient(
-                            listOf(
-                                accent.copy(alpha = 0.12f),
-                                Color.Transparent
-                            )
-                        )
-                    )
-            )
-
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(
-                        horizontal = 25.dp,
-                        vertical = 24.dp
-                    ),
-                horizontalAlignment = Alignment.CenterHorizontally
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.SpaceBetween
             ) {
+                // Encabezado
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 14.dp),
+                        .padding(top = 5.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(
                             text = "A U R A",
-                            color = Color(0xFFEAF7FF),
-                            fontSize = 23.sp,
+                            color = AuraWhite,
+                            fontSize = 25.sp,
                             fontWeight = FontWeight.Light,
                             letterSpacing = 7.sp
                         )
 
                         Text(
                             text = "PERSONAL AI ASSISTANT",
-                            color = Color(0xFF8293B7),
-                            fontSize = 8.sp,
-                            letterSpacing = 2.3.sp
+                            color = AuraMuted,
+                            fontSize = 9.sp,
+                            letterSpacing = 2.sp
                         )
                     }
 
-                    Column(
-                        horizontalAlignment = Alignment.End
-                    ) {
-                        Surface(
-                            color = Color.White.copy(alpha = 0.07f),
-                            shape = CircleShape
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(
-                                    horizontal = 12.dp,
-                                    vertical = 8.dp
-                                ),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(6.dp)
-                                        .background(
-                                            accent,
-                                            CircleShape
-                                        )
-                                )
-
-                                Spacer(Modifier.size(7.dp))
-
-                                Text(
-                                    text = when (voiceState) {
-                                        AuraVoiceState.IDLE -> "READY"
-                                        AuraVoiceState.LISTENING -> "LISTENING"
-                                        AuraVoiceState.PROCESSING -> "THINKING"
-                                        AuraVoiceState.SPEAKING -> "SPEAKING"
-                                    },
-                                    color = Color(0xFFC6D7F4),
-                                    fontSize = 8.sp,
-                                    letterSpacing = 1.2.sp
-                                )
-                            }
-                        }
-
-                        TextButton(onClick = onChatClick) {
-                            Text(
-                                text = "CHAT  ↗",
-                                color = Color(0xFFB6CAFF),
-                                fontSize = 11.sp,
-                                letterSpacing = 1.2.sp
+                    Row(
+                        modifier = Modifier
+                            .background(
+                                Color.White.copy(alpha = 0.07f),
+                                CircleShape
                             )
-                        }
+                            .clickable(onClick = onChatClick)
+                            .padding(horizontal = 13.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        AuraIcon(
+                            AuraIconType.CHAT,
+                            tint = AuraCyan,
+                            size = 19.dp
+                        )
+                        Text(
+                            "CHAT",
+                            color = AuraWhite,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp
+                        )
                     }
                 }
 
-                Spacer(Modifier.height(28.dp))
+                // Esfera y estado
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(310.dp)
+                                .background(
+                                    Brush.radialGradient(
+                                        listOf(
+                                            accent.copy(alpha = 0.16f),
+                                            AuraPurple.copy(alpha = 0.06f),
+                                            Color.Transparent
+                                        )
+                                    ),
+                                    CircleShape
+                                )
+                        )
 
-                AuraOrb(state = voiceState)
+                        AuraOrb(
+                            state = voiceState,
+                            modifier = Modifier.size(270.dp)
+                        )
+                    }
 
-                Spacer(Modifier.height(15.dp))
-
-                AnimatedContent(
-                    targetState = voiceState,
-                    transitionSpec = {
-                        fadeIn(tween(350)) togetherWith
-                            fadeOut(tween(200))
-                    },
-                    label = "aura_status_transition"
-                ) { state ->
-                    Text(
-                        text = when (state) {
-                            AuraVoiceState.IDLE -> "Estoy aquí"
-                            AuraVoiceState.LISTENING -> "Te estoy escuchando"
-                            AuraVoiceState.PROCESSING -> "Procesando"
-                            AuraVoiceState.SPEAKING -> "Estoy hablando"
+                    AnimatedContent(
+                        targetState = status,
+                        transitionSpec = {
+                            fadeIn() togetherWith fadeOut()
                         },
-                        color = Color(0xFFF0F6FF),
-                        fontSize = 23.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        textAlign = TextAlign.Center
+                        label = "aura_home_status"
+                    ) { currentStatus ->
+                        Text(
+                            text = currentStatus,
+                            color = AuraWhite,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            letterSpacing = 1.1.sp,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+
+                    Text(
+                        text = message,
+                        color = AuraMuted,
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        modifier = Modifier.padding(
+                            top = 6.dp,
+                            bottom = 9.dp
+                        )
                     )
                 }
+
+                // Reproductor compacto
+                AuraPlayerPanel(playback)
 
                 Spacer(Modifier.height(9.dp))
 
-                Text(
-                    text = message,
-                    color = Color(0xFF9EACC8),
-                    fontSize = 13.sp,
-                    textAlign = TextAlign.Center,
-                    lineHeight = 20.sp
-                )
-
-                Spacer(Modifier.height(16.dp))
-
-                if (transcript.isNotBlank()) {
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        color = Color.White.copy(alpha = 0.07f),
-                        shape = RoundedCornerShape(23.dp)
-                    ) {
-                        Column(
-                            Modifier.padding(17.dp)
-                        ) {
-                            Text(
-                                text = "TE HE ESCUCHADO",
-                                color = Color(0xFF91B9E8),
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                letterSpacing = 2.sp
-                            )
-
-                            Spacer(Modifier.height(8.dp))
-
-                            Text(
-                                text = transcript,
-                                color = Color(0xFFEAF7FF),
-                                fontSize = 15.sp,
-                                lineHeight = 22.sp
-                            )
-                        }
-                    }
-
-                    Spacer(Modifier.height(15.dp))
-                }
-
-                AuraPlayerPanel(playback)
-
-                Spacer(Modifier.height(14.dp))
-
+                // Estado del asistente del sistema
                 Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = Color.White.copy(alpha = 0.045f),
-                    shape = RoundedCornerShape(18.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onRequestAssistantRole),
+                    color = AuraPanel.copy(alpha = 0.88f),
+                    shape = RoundedCornerShape(17.dp),
                     border = androidx.compose.foundation.BorderStroke(
                         1.dp,
-                        Color.White.copy(alpha = 0.09f)
+                        AuraPurple.copy(alpha = 0.30f)
                     )
                 ) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(
-                                horizontal = 14.dp,
-                                vertical = 12.dp
-                            ),
-                        verticalAlignment = Alignment.CenterVertically
+                        modifier = Modifier.padding(
+                            horizontal = 13.dp,
+                            vertical = 10.dp
+                        ),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(11.dp)
                     ) {
+                        AuraIcon(
+                            AuraIconType.SETTINGS,
+                            tint = AuraCyan,
+                            size = 21.dp
+                        )
+
                         Column(
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
                             Text(
-                                text = "ASISTENTE DE ANDROID",
-                                color = Color(0xFFE3ECFF),
+                                "ASISTENTE DE ANDROID",
+                                color = AuraWhite,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.sp
+                                letterSpacing = 0.7.sp
                             )
 
                             Text(
                                 text = if (assistantRoleHeld) {
                                     "Aura está seleccionada como asistente"
                                 } else {
-                                    "Permite invocar Aura desde el sistema"
+                                    "Configura Aura como asistente del sistema"
                                 },
-                                color = Color(0xFF9BAAC8),
-                                fontSize = 10.sp
+                                color = AuraMuted,
+                                fontSize = 10.sp,
+                                maxLines = 1
                             )
                         }
 
-                        TextButton(
-                            onClick = onRequestAssistantRole
-                        ) {
-                            Text(
-                                text = if (assistantRoleHeld) {
-                                    "ACTIVA"
-                                } else {
-                                    "CONFIGURAR"
-                                },
-                                color = if (assistantRoleHeld) {
-                                    Color(0xFF7DE6D0)
-                                } else {
-                                    Color(0xFFB8C9FF)
-                                },
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
+                        Text(
+                            text = if (assistantRoleHeld) "ACTIVA" else "CONFIGURAR",
+                            color = if (assistantRoleHeld) AuraCyan else AuraPink,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
 
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(9.dp))
 
-                Button(
-                    onClick = onVoiceButtonClick,
+                // Controles principales
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(62.dp),
-                    shape = RoundedCornerShape(22.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = accent,
-                        contentColor = Color(0xFF081020)
-                    )
+                        .padding(bottom = 2.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = if (isListening) {
-                            "DETENER CONVERSACIÓN"
-                        } else {
-                            "HABLAR CON AURA"
-                        },
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 2.sp
+                    HomeAction(
+                        icon = AuraIconType.CHAT,
+                        label = "Chat",
+                        onClick = onChatClick
+                    )
+
+                    Surface(
+                        modifier = Modifier
+                            .size(65.dp)
+                            .clickable(onClick = onVoiceButtonClick),
+                        shape = CircleShape,
+                        color = AuraPurple,
+                        shadowElevation = 9.dp
+                    ) {
+                        Box(
+                            contentAlignment = Alignment.Center
+                        ) {
+                            AuraIcon(
+                                AuraIconType.MIC,
+                                tint = Color.White,
+                                size = 29.dp
+                            )
+                        }
+                    }
+
+                    HomeAction(
+                        icon = AuraIconType.SETTINGS,
+                        label = "Asistente",
+                        onClick = onRequestAssistantRole
                     )
                 }
-
-                Spacer(Modifier.height(23.dp))
-
-                Text(
-                    text = "AURA · INTELLIGENCE IN MOTION",
-                    color = Color(0xFF647493),
-                    fontSize = 8.sp,
-                    letterSpacing = 2.sp
-                )
             }
         }
+    }
+}
+
+@Composable
+private fun HomeAction(
+    icon: AuraIconType,
+    label: String,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 5.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(5.dp)
+    ) {
+        AuraIcon(
+            icon,
+            tint = AuraCyan,
+            size = 23.dp
+        )
+
+        Text(
+            text = label,
+            color = AuraMuted,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Medium
+        )
     }
 }
