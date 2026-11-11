@@ -37,7 +37,6 @@ class AuraVoiceInteractionSession(
         overlay = view
 
         window?.window?.apply {
-
             setBackgroundDrawable(
                 ColorDrawable(Color.TRANSPARENT)
             )
@@ -58,7 +57,6 @@ class AuraVoiceInteractionSession(
                 dp(148),
                 dp(148)
             )
-
         }
 
         return view
@@ -72,9 +70,9 @@ class AuraVoiceInteractionSession(
 
         overlay?.visibility = View.VISIBLE
         overlay?.startOrbAnimation()
+        overlay?.animateEntrance()
 
         if (runtime == null) {
-
             runtime = AuraVoiceRuntime(
                 context = appContext,
 
@@ -85,11 +83,11 @@ class AuraVoiceInteractionSession(
                 },
 
                 onTranscriptChanged = {
-                    // No se muestra texto en la esfera flotante.
+                    // La esfera no muestra transcripciones.
                 },
 
                 onMessageChanged = {
-                    // Las respuestas se reproducen por voz.
+                    // Aura responde mediante voz.
                 }
             )
         }
@@ -98,7 +96,6 @@ class AuraVoiceInteractionSession(
     }
 
     override fun onHide() {
-
         runtime?.stopConversation()
 
         overlay?.setSpeaking(false)
@@ -106,10 +103,15 @@ class AuraVoiceInteractionSession(
         overlay?.stopOrbAnimation()
 
         super.onHide()
+
+        if (AuraWakeWordPreferences.isEnabled(appContext)) {
+            overlay?.postDelayed({
+                AuraWakeWordController.start(appContext)
+            }, 500)
+        }
     }
 
     override fun onDestroy() {
-
         runtime?.release()
         runtime = null
 
@@ -120,5 +122,8 @@ class AuraVoiceInteractionSession(
     }
 
     private fun dp(value: Int): Int =
-        (value * appContext.resources.displayMetrics.density).toInt()
+        (
+            value *
+                appContext.resources.displayMetrics.density
+            ).toInt()
 }
