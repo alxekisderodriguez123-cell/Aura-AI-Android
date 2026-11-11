@@ -1,7 +1,10 @@
 package com.aura.ai.ui
 
 import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
 import android.graphics.drawable.AnimatedImageDrawable
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.Drawable
 import android.os.Build
 import android.widget.ImageView
 import androidx.compose.animation.core.RepeatMode
@@ -20,7 +23,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
-import android.graphics.ImageDecoder
 import com.aura.ai.R
 import com.aura.ai.voice.AuraVoiceState
 
@@ -49,7 +51,7 @@ fun AuraOrb(
         label = "aura_speaking_pulse"
     )
 
-    val orbDrawable = remember(context) {
+    val orbDrawable: Drawable? = remember(context) {
         try {
             if (Build.VERSION.SDK_INT >= 28) {
                 ImageDecoder.decodeDrawable(
@@ -59,10 +61,12 @@ fun AuraOrb(
                     )
                 )
             } else {
-                BitmapFactory.decodeResource(
+                val bitmap = BitmapFactory.decodeResource(
                     context.resources,
                     R.raw.aura_orb
                 )
+
+                BitmapDrawable(context.resources, bitmap)
             }
         } catch (_: Exception) {
             null
@@ -70,20 +74,14 @@ fun AuraOrb(
     }
 
     DisposableEffect(orbDrawable) {
-        if (Build.VERSION.SDK_INT >= 28 &&
-            orbDrawable is AnimatedImageDrawable
-        ) {
-            orbDrawable.repeatCount =
-                AnimatedImageDrawable.REPEAT_INFINITE
-            orbDrawable.start()
-        }
+        val animated = orbDrawable as? AnimatedImageDrawable
+
+        animated?.repeatCount =
+            AnimatedImageDrawable.REPEAT_INFINITE
+        animated?.start()
 
         onDispose {
-            if (Build.VERSION.SDK_INT >= 28 &&
-                orbDrawable is AnimatedImageDrawable
-            ) {
-                orbDrawable.stop()
-            }
+            animated?.stop()
         }
     }
 
