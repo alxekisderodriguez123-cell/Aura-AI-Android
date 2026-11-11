@@ -25,9 +25,7 @@ class AuraAssistActivity : ComponentActivity() {
             if (granted) {
                 startAura()
             } else {
-                overlay?.setStatus(
-                    "Necesito permiso del micrófono."
-                )
+                closeAura()
             }
         }
 
@@ -38,25 +36,41 @@ class AuraAssistActivity : ComponentActivity() {
             ColorDrawable(Color.TRANSPARENT)
         )
 
-        window.addFlags(
+        window.clearFlags(
             WindowManager.LayoutParams.FLAG_DIM_BEHIND
         )
 
-        window.setDimAmount(0.12f)
+        window.addFlags(
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+        )
 
-        val view = AuraVoiceOverlayView(this) {
-            closeAura()
-        }
+        val view = AuraVoiceOverlayView(
+            context = this,
+
+            onTapWhileSpeaking = {
+                runtime?.interruptSpeechAndListen()
+            },
+
+            onClose = {
+                closeAura()
+            }
+        )
 
         overlay = view
         setContentView(view)
 
-        window.setGravity(Gravity.BOTTOM)
+        window.setGravity(
+            Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+        )
 
         window.setLayout(
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.WRAP_CONTENT
+            dp(148),
+            dp(148)
         )
+
+        window.attributes = window.attributes.apply {
+            y = dp(22)
+        }
 
         if (
             ContextCompat.checkSelfPermission(
@@ -75,8 +89,7 @@ class AuraAssistActivity : ComponentActivity() {
     private fun startAura() {
         if (runtime != null) return
 
-        overlay?.setStatus("Te estoy escuchando")
-        overlay?.setTranscript("Dime, ¿en qué te ayudo?")
+        overlay?.startOrbAnimation()
 
         runtime = AuraVoiceRuntime(
             context = applicationContext,
@@ -87,14 +100,12 @@ class AuraAssistActivity : ComponentActivity() {
                 )
             },
 
-            onTranscriptChanged = { text ->
-                if (text.isNotBlank()) {
-                    overlay?.setTranscript(text)
-                }
+            onTranscriptChanged = {
+                // La esfera no muestra transcripciones.
             },
 
-            onMessageChanged = { message ->
-                overlay?.setStatus(message)
+            onMessageChanged = {
+                // La respuesta se escucha mediante TTS.
             }
         )
 
@@ -115,4 +126,7 @@ class AuraAssistActivity : ComponentActivity() {
 
         super.onDestroy()
     }
+
+    private fun dp(value: Int): Int =
+        (value * resources.displayMetrics.density).toInt()
 }
