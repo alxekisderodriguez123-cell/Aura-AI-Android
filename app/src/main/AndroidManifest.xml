@@ -70,7 +70,14 @@
             android:exported="true"
             android:excludeFromRecents="true"
             android:launchMode="singleTask"
-            android:theme="@style/Theme.Aura.AssistantOverlay" />
+            android:theme="@style/Theme.Aura.AssistantOverlay">
+
+            <intent-filter>
+                <action android:name="android.intent.action.ASSIST" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+
+        </activity>
 
         <service
             android:name=".media.AuraPlaybackService"
