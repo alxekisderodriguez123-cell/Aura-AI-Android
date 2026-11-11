@@ -1,3 +1,4 @@
+
 package com.aura.ai.ui
 
 import android.graphics.Bitmap
@@ -12,11 +13,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
@@ -42,6 +44,13 @@ import com.aura.ai.media.AuraPlaybackController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+private val PlayerPanel = Color(0xFF211D3D)
+private val PlayerPurple = Color(0xFF9D55FF)
+private val PlayerPink = Color(0xFFF04FAD)
+private val PlayerCyan = Color(0xFF39DDF5)
+private val PlayerText = Color(0xFFF2F3FF)
+private val PlayerMuted = Color(0xFFB7BBD5)
+
 @Composable
 fun AuraPlayerPanel(
     playback: AuraPlaybackController
@@ -50,96 +59,101 @@ fun AuraPlayerPanel(
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = Color.White.copy(alpha = 0.065f),
-        shape = RoundedCornerShape(27.dp),
+        color = PlayerPanel.copy(alpha = 0.94f),
+        shape = RoundedCornerShape(19.dp),
         border = androidx.compose.foundation.BorderStroke(
             1.dp,
-            Color.White.copy(alpha = 0.13f)
+            PlayerPurple.copy(alpha = 0.32f)
         )
     ) {
         Column(
-            modifier = Modifier.padding(16.dp)
+            modifier = Modifier.padding(
+                horizontal = 12.dp,
+                vertical = 9.dp
+            ),
+            verticalArrangement = Arrangement.spacedBy(7.dp)
         ) {
             Row(
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "AURA MUSIC",
-                    color = Color(0xFF9BBEFF),
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 2.sp
-                )
-
-                Spacer(Modifier.weight(1f))
-
-                Text(
-                    text = if (playback.isPlaying) {
-                        "REPRODUCIENDO"
-                    } else {
-                        "REPRODUCTOR"
-                    },
-                    color = Color(0xFF9BAAC7),
-                    fontSize = 8.sp,
-                    letterSpacing = 1.sp
-                )
-            }
-
-            Spacer(Modifier.height(15.dp))
-
-            Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(14.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 AuraAlbumArtwork(
                     uri = playback.artworkUri,
-                    modifier = Modifier.size(84.dp)
+                    modifier = Modifier.size(49.dp)
                 )
 
                 Column(
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Text(
                         text = playback.title,
-                        color = Color(0xFFF2F6FF),
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-
-                    Spacer(Modifier.height(5.dp))
-
-                    Text(
-                        text = playback.artist,
-                        color = Color(0xFFB0BED8),
+                        color = PlayerText,
                         fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
 
-                    if (playback.album.isNotBlank()) {
-                        Spacer(Modifier.height(3.dp))
+                    Text(
+                        text = playback.artist,
+                        color = PlayerMuted,
+                        fontSize = 10.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
 
-                        Text(
-                            text = playback.album,
-                            color = Color(0xFF7889AB),
-                            fontSize = 10.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                    Text(
+                        text = if (playback.isPlaying) {
+                            "REPRODUCIENDO"
+                        } else {
+                            "AURA MUSIC"
+                        },
+                        color = PlayerCyan,
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp
+                    )
+                }
+
+                PlayerButton(
+                    icon = AuraIconType.PREVIOUS,
+                    onClick = playback::previous
+                )
+
+                Surface(
+                    modifier = Modifier
+                        .size(39.dp)
+                        .clickable(
+                            enabled = playback.queue.isNotEmpty(),
+                            onClick = playback::togglePlayback
+                        ),
+                    color = PlayerPurple,
+                    shape = CircleShape
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        AuraIcon(
+                            if (playback.isPlaying) {
+                                AuraIconType.PAUSE
+                            } else {
+                                AuraIconType.PLAY
+                            },
+                            tint = Color.White,
+                            size = 19.dp
                         )
                     }
                 }
-            }
 
-            Spacer(Modifier.height(12.dp))
+                PlayerButton(
+                    icon = AuraIconType.NEXT,
+                    onClick = playback::next
+                )
+            }
 
             Slider(
                 value = if (playback.duration > 0L) {
-                    playback.position
-                        .toFloat()
-                        .div(playback.duration.toFloat())
-                        .coerceIn(0f, 1f)
+                    (playback.position.toFloat() /
+                        playback.duration.toFloat()).coerceIn(0f, 1f)
                 } else {
                     0f
                 },
@@ -151,156 +165,81 @@ fun AuraPlayerPanel(
                     }
                 },
                 enabled = playback.duration > 0L,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 1.dp),
                 colors = SliderDefaults.colors(
-                    thumbColor = Color(0xFFB8C7FF),
-                    activeTrackColor = Color(0xFF8B9FFF),
-                    inactiveTrackColor = Color.White.copy(alpha = 0.15f)
+                    thumbColor = PlayerCyan,
+                    activeTrackColor = PlayerPurple,
+                    inactiveTrackColor = Color.White.copy(alpha = 0.17f)
                 )
             )
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = formatTime(playback.position),
-                    color = Color(0xFF91A1C0),
-                    fontSize = 10.sp
-                )
-
-                Text(
-                    text = formatTime(playback.duration),
-                    color = Color(0xFF91A1C0),
-                    fontSize = 10.sp
-                )
-            }
-
-            Spacer(Modifier.height(8.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                PlayerControl(
-                    symbol = "PREV",
-                    onClick = playback::previous
-                )
-
-                Spacer(Modifier.size(24.dp))
-
-                Surface(
-                    modifier = Modifier
-                        .size(55.dp)
-                        .clickable(
-                            enabled = playback.queue.isNotEmpty(),
-                            onClick = playback::togglePlayback
-                        ),
-                    shape = CircleShape,
-                    color = Color(0xFFB8C7FF)
-                ) {
-                    Box(
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = if (playback.isPlaying) "Ⅱ" else "▶",
-                            color = Color(0xFF10172D),
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-
-                Spacer(Modifier.size(24.dp))
-
-                PlayerControl(
-                    symbol = "NEXT",
-                    onClick = playback::next
-                )
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable {
-                        showQueue = !showQueue
-                    }
-                    .padding(vertical = 7.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "COLA DE REPRODUCCIÓN",
-                    color = Color(0xFFB5C8F5),
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.4.sp
+                    formatTime(playback.position),
+                    color = PlayerMuted,
+                    fontSize = 9.sp
                 )
 
                 Spacer(Modifier.weight(1f))
 
-                Text(
-                    text = "${playback.queue.size} pistas  ${if (showQueue) "−" else "+"}",
-                    color = Color(0xFF91A3C6),
-                    fontSize = 10.sp
-                )
-            }
+                Box {
+                    Row(
+                        modifier = Modifier
+                            .clickable { showQueue = true }
+                            .padding(horizontal = 5.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        AuraIcon(
+                            AuraIconType.MUSIC,
+                            tint = PlayerCyan,
+                            size = 15.dp
+                        )
 
-            if (showQueue && playback.queue.isNotEmpty()) {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(7.dp)
-                ) {
-                    playback.queue.forEachIndexed { index, item ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    playback.playQueueItem(index)
-                                }
-                                .background(
-                                    if (index == playback.currentIndex) {
-                                        Color(0xFF788DFF).copy(alpha = 0.17f)
-                                    } else {
-                                        Color.Transparent
-                                    },
-                                    RoundedCornerShape(12.dp)
-                                )
-                                .padding(
-                                    horizontal = 10.dp,
-                                    vertical = 9.dp
-                                ),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = if (index == playback.currentIndex) {
-                                    "▶"
-                                } else {
-                                    "${index + 1}"
-                                },
-                                color = Color(0xFF9DB5FF),
-                                fontSize = 10.sp
+                        Text(
+                            "${playback.queue.size} pistas",
+                            color = PlayerText,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    DropdownMenu(
+                        expanded = showQueue,
+                        onDismissRequest = { showQueue = false }
+                    ) {
+                        if (playback.queue.isEmpty()) {
+                            DropdownMenuItem(
+                                text = { Text("La cola está vacía") },
+                                onClick = { showQueue = false }
                             )
-
-                            Spacer(Modifier.size(10.dp))
-
-                            Column(
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text(
-                                    text = item.title,
-                                    color = Color(0xFFEAF0FF),
-                                    fontSize = 11.sp,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-
-                                Text(
-                                    text = item.artist,
-                                    color = Color(0xFF91A0BD),
-                                    fontSize = 9.sp,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
+                        } else {
+                            playback.queue.forEachIndexed { index, item ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Column {
+                                            Text(
+                                                item.title,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Text(
+                                                item.artist,
+                                                fontSize = 11.sp,
+                                                color = PlayerMuted,
+                                                maxLines = 1
+                                            )
+                                        }
+                                    },
+                                    onClick = {
+                                        playback.playQueueItem(index)
+                                        showQueue = false
+                                    }
                                 )
                             }
                         }
@@ -312,23 +251,22 @@ fun AuraPlayerPanel(
 }
 
 @Composable
-private fun PlayerControl(
-    symbol: String,
+private fun PlayerButton(
+    icon: AuraIconType,
     onClick: () -> Unit
 ) {
     Surface(
         modifier = Modifier
-            .size(40.dp)
+            .size(31.dp)
             .clickable(onClick = onClick),
         shape = CircleShape,
-        color = Color.White.copy(alpha = 0.07f)
+        color = Color.White.copy(alpha = 0.08f)
     ) {
         Box(contentAlignment = Alignment.Center) {
-            Text(
-                text = symbol,
-                color = Color(0xFFD9E5FF),
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Bold
+            AuraIcon(
+                icon,
+                tint = PlayerText,
+                size = 16.dp
             )
         }
     }
@@ -352,9 +290,7 @@ private fun AuraAlbumArtwork(
                 } else {
                     context.contentResolver
                         .openInputStream(uri)
-                        ?.use { stream ->
-                            BitmapFactory.decodeStream(stream)
-                        }
+                        ?.use { BitmapFactory.decodeStream(it) }
                 }
             } catch (_: Exception) {
                 null
@@ -364,34 +300,33 @@ private fun AuraAlbumArtwork(
 
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(17.dp),
-        color = Color(0xFF202D52)
+        shape = RoundedCornerShape(12.dp),
+        color = PlayerPanel
     ) {
         if (bitmap != null) {
             Image(
                 bitmap = bitmap!!.asImageBitmap(),
                 contentDescription = "Carátula del álbum",
-                modifier = Modifier.size(84.dp),
+                modifier = Modifier.size(49.dp),
                 contentScale = ContentScale.Crop
             )
         } else {
             Box(
-                modifier = Modifier
-                    .background(
-                        Brush.linearGradient(
-                            listOf(
-                                Color(0xFF586BCA),
-                                Color(0xFF9B55B9),
-                                Color(0xFFEC7198)
-                            )
+                modifier = Modifier.background(
+                    Brush.linearGradient(
+                        listOf(
+                            PlayerPurple,
+                            PlayerPink,
+                            PlayerCyan
                         )
-                    ),
+                    )
+                ),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = "♫",
-                    color = Color.White,
-                    fontSize = 36.sp
+                AuraIcon(
+                    AuraIconType.MUSIC,
+                    tint = Color.White,
+                    size = 25.dp
                 )
             }
         }
@@ -399,9 +334,6 @@ private fun AuraAlbumArtwork(
 }
 
 private fun formatTime(milliseconds: Long): String {
-    val totalSeconds = (milliseconds / 1000L).coerceAtLeast(0L)
-    val minutes = totalSeconds / 60L
-    val seconds = totalSeconds % 60L
-
-    return "%d:%02d".format(minutes, seconds)
+    val seconds = (milliseconds / 1000L).coerceAtLeast(0L)
+    return "%d:%02d".format(seconds / 60L, seconds % 60L)
 }
