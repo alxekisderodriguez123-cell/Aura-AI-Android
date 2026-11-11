@@ -1,4 +1,3 @@
-
 package com.aura.ai.assistant
 
 import android.content.Context
@@ -36,13 +35,9 @@ class AuraVoiceRuntime(
 
     private val voiceController = AuraVoiceController(
         context = appContext,
-
         onStateChanged = onStateChanged,
-
         onTranscriptChanged = onTranscriptChanged,
-
         onMessageChanged = onMessageChanged,
-
         onFinalTranscript = { text ->
             processMessage(text)
         }
@@ -60,6 +55,13 @@ class AuraVoiceRuntime(
         if (!released) {
             voiceController.stopConversation()
         }
+    }
+
+    fun interruptSpeechAndListen() {
+        if (released) return
+
+        voiceController.stopConversation()
+        voiceController.startConversation()
     }
 
     private fun processMessage(rawText: String) {
@@ -122,6 +124,7 @@ class AuraVoiceRuntime(
         )
 
         onTranscriptChanged(response)
+
         voiceController.speakResponse(
             text = response,
             continueListening = true
