@@ -40,6 +40,8 @@
     <application
         android:allowBackup="false"
         android:label="Aura"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
@@ -64,14 +66,8 @@
             android:name=".assistant.AuraAssistActivity"
             android:exported="true"
             android:excludeFromRecents="true"
-            android:launchMode="singleTask">
-
-            <intent-filter>
-                <action android:name="android.intent.action.ASSIST" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-
-        </activity>
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.Aura.AssistantOverlay" />
 
         <service
             android:name=".media.AuraPlaybackService"
