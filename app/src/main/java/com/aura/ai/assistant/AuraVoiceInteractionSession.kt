@@ -1,4 +1,3 @@
-
 package com.aura.ai.assistant
 
 import android.content.Intent
@@ -30,7 +29,7 @@ import java.util.Locale
 class AuraVoiceInteractionSession(
     context: android.content.Context
 ) : VoiceInteractionSession(context) {
-
+    private val appContext = context.applicationContext
     private val handler = Handler(Looper.getMainLooper())
 
     private var overlay: AuraVoiceOverlayView? = null
