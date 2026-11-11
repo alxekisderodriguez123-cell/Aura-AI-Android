@@ -1,6 +1,8 @@
 package com.aura.ai.assistant
 
 import android.content.Context
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import android.service.voice.VoiceInteractionSession
 import android.view.Gravity
@@ -18,27 +20,45 @@ class AuraVoiceInteractionSession(
     private var runtime: AuraVoiceRuntime? = null
 
     override fun onCreateContentView(): View {
-        val view = AuraVoiceOverlayView(appContext) {
-            runtime?.stopConversation()
-            hide()
-        }
 
-        view.visibility = View.INVISIBLE
+        val view = AuraVoiceOverlayView(
+            context = appContext,
+
+            onTapWhileSpeaking = {
+                runtime?.interruptSpeechAndListen()
+            },
+
+            onClose = {
+                runtime?.stopConversation()
+                hide()
+            }
+        )
+
         overlay = view
 
         window?.window?.apply {
-            setGravity(Gravity.BOTTOM)
 
-            setLayout(
-                WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.WRAP_CONTENT
+            setBackgroundDrawable(
+                ColorDrawable(Color.TRANSPARENT)
             )
 
-            addFlags(
+            clearFlags(
                 WindowManager.LayoutParams.FLAG_DIM_BEHIND
             )
 
-            setDimAmount(0.12f)
+            addFlags(
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+            )
+
+            setGravity(
+                Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+            )
+
+            setLayout(
+                dp(148),
+                dp(148)
+            )
+
         }
 
         return view
@@ -51,11 +71,10 @@ class AuraVoiceInteractionSession(
         super.onShow(args, showFlags)
 
         overlay?.visibility = View.VISIBLE
-
-        overlay?.setStatus("Te estoy escuchando")
-        overlay?.setTranscript("Dime, ¿en qué te ayudo?")
+        overlay?.startOrbAnimation()
 
         if (runtime == null) {
+
             runtime = AuraVoiceRuntime(
                 context = appContext,
 
@@ -65,14 +84,12 @@ class AuraVoiceInteractionSession(
                     )
                 },
 
-                onTranscriptChanged = { text ->
-                    if (text.isNotBlank()) {
-                        overlay?.setTranscript(text)
-                    }
+                onTranscriptChanged = {
+                    // No se muestra texto en la esfera flotante.
                 },
 
-                onMessageChanged = { message ->
-                    overlay?.setStatus(message)
+                onMessageChanged = {
+                    // Las respuestas se reproducen por voz.
                 }
             )
         }
@@ -81,15 +98,18 @@ class AuraVoiceInteractionSession(
     }
 
     override fun onHide() {
+
         runtime?.stopConversation()
 
-        overlay?.visibility = View.INVISIBLE
         overlay?.setSpeaking(false)
+        overlay?.visibility = View.INVISIBLE
+        overlay?.stopOrbAnimation()
 
         super.onHide()
     }
 
     override fun onDestroy() {
+
         runtime?.release()
         runtime = null
 
@@ -98,4 +118,7 @@ class AuraVoiceInteractionSession(
 
         super.onDestroy()
     }
+
+    private fun dp(value: Int): Int =
+        (value * appContext.resources.displayMetrics.density).toInt()
 }
