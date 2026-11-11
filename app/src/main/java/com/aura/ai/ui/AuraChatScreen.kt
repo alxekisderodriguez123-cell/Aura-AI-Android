@@ -41,6 +41,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.aura.ai.chat.ChatMessage
+import androidx.compose.foundation.layout.size
 
 private val ChatBackground = Color(0xFF101329)
 private val ChatPanel = Color(0xFF211D3D)
