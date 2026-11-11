@@ -12,6 +12,7 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.view.Gravity
 import android.view.MotionEvent
+import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
@@ -30,6 +31,7 @@ class AuraVoiceOverlayView(
     private var isSpeaking = false
     private var downX = 0f
     private var downY = 0f
+
     private var pulseAnimator: ValueAnimator? = null
 
     private val swipeThreshold =
@@ -37,6 +39,7 @@ class AuraVoiceOverlayView(
 
     init {
         setBackgroundColor(Color.TRANSPARENT)
+
         clipChildren = false
         clipToPadding = false
 
@@ -109,7 +112,11 @@ class AuraVoiceOverlayView(
 
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
-                setColor(Color.argb(185, 30, 25, 48))
+
+                setColor(
+                    Color.argb(185, 30, 25, 48)
+                )
+
                 setStroke(
                     dp(1),
                     Color.argb(150, 150, 115, 220)
@@ -150,6 +157,7 @@ class AuraVoiceOverlayView(
                     resources,
                     R.raw.aura_orb
                 )
+
                 BitmapDrawable(resources, bitmap)
             }
         } catch (error: Exception) {
@@ -158,8 +166,27 @@ class AuraVoiceOverlayView(
                 "No se pudo cargar la esfera",
                 error
             )
+
             null
         }
+    }
+
+    fun animateEntrance() {
+        alpha = 0f
+        translationY = dp(32).toFloat()
+        scaleX = 0.72f
+        scaleY = 0.72f
+
+        animate()
+            .alpha(1f)
+            .translationY(0f)
+            .scaleX(1f)
+            .scaleY(1f)
+            .setDuration(400L)
+            .setInterpolator(
+                DecelerateInterpolator()
+            )
+            .start()
     }
 
     fun setSpeaking(speaking: Boolean) {
@@ -180,7 +207,9 @@ class AuraVoiceOverlayView(
                 repeatMode = ValueAnimator.REVERSE
 
                 addUpdateListener { animator ->
-                    val scale = animator.animatedValue as Float
+                    val scale =
+                        animator.animatedValue as Float
+
                     orbView.scaleX = scale
                     orbView.scaleY = scale
                 }
@@ -201,6 +230,7 @@ class AuraVoiceOverlayView(
         ) {
             animatedOrb.repeatCount =
                 AnimatedImageDrawable.REPEAT_INFINITE
+
             animatedOrb.start()
         }
     }
@@ -211,11 +241,20 @@ class AuraVoiceOverlayView(
 
         animatedOrb?.stop()
 
-        orbView.animate().cancel()
+        animate().cancel()
+
+        alpha = 1f
+        translationY = 0f
+        scaleX = 1f
+        scaleY = 1f
+
         orbView.scaleX = 1f
         orbView.scaleY = 1f
     }
 
     private fun dp(value: Int): Int =
-        (value * resources.displayMetrics.density).toInt()
+        (
+            value *
+                resources.displayMetrics.density
+            ).toInt()
 }
