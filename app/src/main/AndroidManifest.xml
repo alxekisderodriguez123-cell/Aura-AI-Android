@@ -30,6 +30,7 @@
         <intent>
             <action android:name="android.speech.RecognitionService" />
         </intent>
+
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
@@ -42,7 +43,6 @@
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
-        <!-- Actividad principal -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -54,9 +54,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
+
         </activity>
 
-        <!-- Entrada estándar de Android para el rol de asistente -->
         <activity
             android:name=".assistant.AuraAssistActivity"
             android:exported="true"
@@ -70,7 +73,6 @@
 
         </activity>
 
-        <!-- Acceso multimedia -->
         <service
             android:name=".media.AuraPlaybackService"
             android:exported="true"
@@ -83,7 +85,6 @@
 
         </service>
 
-        <!-- Servicio principal del asistente -->
         <service
             android:name=".assistant.AuraVoiceInteractionService"
             android:permission="android.permission.BIND_VOICE_INTERACTION"
@@ -99,16 +100,10 @@
                 android:resource="@xml/aura_voice_interaction" />
         </service>
 
-        <!-- Sesión visual del asistente -->
         <service
             android:name=".assistant.AuraVoiceInteractionSessionService"
             android:permission="android.permission.BIND_VOICE_INTERACTION"
             android:exported="true" />
-
-        <!-- Acciones directas publicadas por Aura -->
-        <meta-data
-            android:name="android.app.shortcuts"
-            android:resource="@xml/shortcuts" />
 
     </application>
 
