@@ -1,4 +1,3 @@
-
 package com.aura.ai.ui
 
 import android.graphics.BitmapFactory
@@ -22,6 +21,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import android.graphics.ImageDecoder
+import com.aura.ai.R
+import com.aura.ai.voice.AuraVoiceState
 
 @Composable
 fun AuraOrb(
