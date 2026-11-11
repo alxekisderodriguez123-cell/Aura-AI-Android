@@ -6,7 +6,6 @@ import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
 import androidx.core.app.NotificationCompat
-import com.aura.ai.R
 
 object AuraWakeWordNotification {
 
@@ -27,6 +26,7 @@ object AuraWakeWordNotification {
         ).apply {
             description =
                 "Mantiene activa la detección de la palabra de activación."
+
             setShowBadge(false)
         }
 
@@ -38,7 +38,7 @@ object AuraWakeWordNotification {
             context,
             CHANNEL_ID
         )
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentTitle("Aura está escuchando")
             .setContentText(
                 "Di Hey Aura, Ey Aura, Oye Aura o Hola Aura."
