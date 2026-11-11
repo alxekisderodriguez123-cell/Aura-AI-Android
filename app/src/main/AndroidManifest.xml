@@ -63,11 +63,20 @@
 
         </activity>
 
+        <!-- Servicio multimedia de Aura -->
         <service
             android:name=".media.AuraPlaybackService"
-            android:exported="false"
-            android:foregroundServiceType="mediaPlayback" />
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback">
 
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaSessionService" />
+                <action android:name="android.media.browse.MediaBrowserService" />
+            </intent-filter>
+
+        </service>
+
+        <!-- Servicio de interacción por voz -->
         <service
             android:name=".assistant.AuraVoiceInteractionService"
             android:permission="android.permission.BIND_VOICE_INTERACTION"
