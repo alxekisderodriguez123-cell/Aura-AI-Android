@@ -82,7 +82,12 @@ fun AuraOrb(
 
                         (drawable as? AnimatedImageDrawable)?.start()
                     } catch (_: Exception) {
-                        setImageResource(R.drawable.ic_launcher_foreground)
+                        val bitmap = BitmapFactory.decodeResource(
+                            resources,
+                            R.raw.aura_orb
+                        )
+                        setImageBitmap(bitmap)
+                    }
                     }
                 } else {
                     val bitmap = BitmapFactory.decodeResource(
