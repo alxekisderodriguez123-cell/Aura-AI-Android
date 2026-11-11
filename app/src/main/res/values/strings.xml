@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="aura_voice_shortcut_short">Hablar con Aura</string>
+    <string name="aura_voice_shortcut_long">Iniciar conversación por voz con Aura</string>
+</resources>
