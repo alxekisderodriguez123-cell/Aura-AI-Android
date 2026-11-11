@@ -1,6 +1,6 @@
+
 package com.aura.ai.ui
 
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -12,8 +12,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -34,102 +34,119 @@ fun AuraOrb(
     val transition = rememberInfiniteTransition(label = "aura_liquid")
 
     val duration = when (state) {
-        AuraVoiceState.IDLE -> 9000
-        AuraVoiceState.LISTENING -> 6200
-        AuraVoiceState.PROCESSING -> 3300
-        AuraVoiceState.SPEAKING -> 1900
+        AuraVoiceState.IDLE -> 11000
+        AuraVoiceState.LISTENING -> 7500
+        AuraVoiceState.PROCESSING -> 4300
+        AuraVoiceState.SPEAKING -> 2800
     }
 
     val phase by transition.animateFloat(
         initialValue = 0f,
         targetValue = 2f * PI.toFloat(),
         animationSpec = infiniteRepeatable(
-            animation = tween(duration, easing = LinearEasing),
+            animation = tween(
+                durationMillis = duration,
+                easing = LinearEasing
+            ),
             repeatMode = RepeatMode.Restart
         ),
         label = "liquid_phase"
     )
 
-    val breathing by transition.animateFloat(
-        initialValue = 0.975f,
-        targetValue = when (state) {
-            AuraVoiceState.IDLE -> 1.025f
-            AuraVoiceState.LISTENING -> 1.035f
-            AuraVoiceState.PROCESSING -> 1.055f
-            AuraVoiceState.SPEAKING -> 1.065f
-        },
+    val secondaryPhase by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 2f * PI.toFloat(),
         animationSpec = infiniteRepeatable(
             animation = tween(
-                durationMillis = when (state) {
-                    AuraVoiceState.IDLE -> 4200
-                    AuraVoiceState.LISTENING -> 3600
-                    AuraVoiceState.PROCESSING -> 1700
-                    AuraVoiceState.SPEAKING -> 950
-                },
-                easing = FastOutSlowInEasing
+                durationMillis = duration * 2,
+                easing = LinearEasing
             ),
-            repeatMode = RepeatMode.Reverse
+            repeatMode = RepeatMode.Restart
         ),
-        label = "orb_breath"
+        label = "secondary_liquid_phase"
     )
 
     val pulse = audioLevel.coerceIn(0f, 1f) *
-        if (state == AuraVoiceState.SPEAKING) 0.085f else 0.025f
+        if (state == AuraVoiceState.SPEAKING) 0.075f else 0.025f
 
     Canvas(
-        modifier = modifier
-            .size(330.dp)
-            .scale(breathing + pulse)
+        modifier = modifier.size(330.dp)
     ) {
-        val center = Offset(size.width / 2f, size.height / 2f)
-        val radius = size.minDimension * 0.335f
+        val center = Offset(
+            size.width / 2f,
+            size.height / 2f
+        )
+
+        // El radio y el contorno nunca cambian.
+        val radius = size.minDimension * 0.405f
+
+        val spherePath = Path().apply {
+            addOval(
+                Rect(
+                    center.x - radius,
+                    center.y - radius,
+                    center.x + radius,
+                    center.y + radius
+                )
+            )
+        }
 
         val cyan = Color(0xFF62F4FF)
-        val blue = Color(0xFF397BFF)
-        val indigo = Color(0xFF5140D9)
+        val blue = Color(0xFF287BFF)
+        val indigo = Color(0xFF2435B8)
         val violet = Color(0xFF9854FF)
-        val magenta = Color(0xFFFF4FA8)
+        val magenta = Color(0xFFFF45A8)
         val coral = Color(0xFFFF806F)
 
         val saturation = when (state) {
             AuraVoiceState.IDLE -> 0.78f
-            AuraVoiceState.LISTENING -> 0.68f
-            AuraVoiceState.PROCESSING -> 0.92f
+            AuraVoiceState.LISTENING -> 0.85f
+            AuraVoiceState.PROCESSING -> 0.95f
             AuraVoiceState.SPEAKING -> 1f
         }
 
         val energy = when (state) {
-            AuraVoiceState.IDLE -> 0.48f
-            AuraVoiceState.LISTENING -> 0.38f
-            AuraVoiceState.PROCESSING -> 0.76f
-            AuraVoiceState.SPEAKING -> 0.88f
-        } + pulse
+            AuraVoiceState.IDLE -> 0.58f
+            AuraVoiceState.LISTENING -> 0.68f
+            AuraVoiceState.PROCESSING -> 0.82f
+            AuraVoiceState.SPEAKING -> 1f
+        }
 
         fun organicPath(
             baseRadius: Float,
             offset: Float,
             amount: Float,
-            frequency: Float
+            frequency: Float,
+            movementPhase: Float = phase
         ): Path {
-            val count = 72
+            val count = 100
             val points = ArrayList<Offset>(count)
 
             for (i in 0 until count) {
-                val angle = i.toFloat() / count * 2f * PI.toFloat()
+                val angle =
+                    i.toFloat() / count * 2f * PI.toFloat()
 
                 val waveA = sin(
-                    angle * 3f + phase * frequency + offset
+                    angle * 2.5f +
+                        movementPhase * frequency +
+                        offset
                 )
+
                 val waveB = cos(
-                    angle * 2f - phase * 0.73f + offset
+                    angle * 3.5f -
+                        movementPhase * 0.65f +
+                        offset
                 )
+
                 val waveC = sin(
-                    angle * 5f + phase * 0.42f + offset * 1.7f
+                    angle * 5f +
+                        movementPhase * 0.38f +
+                        offset * 1.6f
                 )
 
                 val deformation = 1f +
-                    waveA * amount * 0.46f +
-                    waveB * amount * 0.34f +
+                    waveA * amount * 0.48f +
+                    waveB * amount * 0.32f +
                     waveC * amount * 0.20f
 
                 val r = baseRadius * deformation
@@ -172,90 +189,62 @@ fun AuraOrb(
             return path
         }
 
+        // Resplandor exterior circular.
         drawCircle(
             brush = Brush.radialGradient(
                 colors = listOf(
-                    violet.copy(alpha = 0.25f * energy),
+                    violet.copy(alpha = 0.23f * energy),
                     magenta.copy(alpha = 0.12f * energy),
-                    cyan.copy(alpha = 0.055f),
+                    cyan.copy(alpha = 0.07f),
                     Color.Transparent
                 ),
                 center = center,
-                radius = radius * 2.05f
+                radius = radius * 1.55f
             ),
-            radius = radius * 2.05f,
+            radius = radius * 1.55f,
             center = center
         )
 
-        val silhouette = organicPath(
-            radius,
-            0f,
-            if (state == AuraVoiceState.SPEAKING) 0.105f else 0.075f,
-            1f
-        )
-
+        // Base de cristal: siempre perfectamente circular.
         drawPath(
-            path = silhouette,
+            path = spherePath,
             brush = Brush.radialGradient(
                 colors = listOf(
-                    Color(0xFF342C72),
-                    Color(0xFF171A42),
+                    Color(0xFF263D91),
+                    Color(0xFF101C52),
                     Color(0xFF080D25)
                 ),
                 center = Offset(
-                    center.x - radius * 0.22f,
-                    center.y - radius * 0.30f
+                    center.x - radius * 0.30f,
+                    center.y - radius * 0.42f
                 ),
-                radius = radius * 1.55f
+                radius = radius * 1.75f
             )
         )
 
-        clipPath(silhouette) {
+        // Todas las formas líquidas quedan confinadas
+        // dentro del contorno circular.
+        clipPath(spherePath) {
+
+            // Corriente rosa.
             val pinkLayer = organicPath(
-                radius * 0.76f,
-                1.4f,
-                0.30f + pulse,
-                0.82f
+                baseRadius = radius * 0.77f,
+                offset = 1.4f,
+                amount = 0.22f + pulse,
+                frequency = 0.78f
             )
 
             drawPath(
                 path = pinkLayer,
                 brush = Brush.linearGradient(
                     colors = listOf(
-                        coral.copy(alpha = 0.88f * saturation),
+                        coral.copy(alpha = 0.90f * saturation),
                         magenta.copy(alpha = 0.92f * saturation),
-                        violet.copy(alpha = 0.72f)
-                    ),
-                    start = Offset(
-                        center.x - radius * 0.8f,
-                        center.y - radius * 0.75f
-                    ),
-                    end = Offset(
-                        center.x + radius,
-                        center.y + radius * 0.8f
-                    )
-                )
-            )
-
-            val blueLayer = organicPath(
-                radius * 0.83f,
-                3.1f,
-                0.27f + pulse * 0.7f,
-                -0.67f
-            )
-
-            drawPath(
-                path = blueLayer,
-                brush = Brush.linearGradient(
-                    colors = listOf(
-                        cyan.copy(alpha = 0.96f * saturation),
-                        blue.copy(alpha = 0.92f),
-                        indigo.copy(alpha = 0.78f),
-                        violet.copy(alpha = 0.54f)
+                        violet.copy(alpha = 0.76f)
                     ),
                     start = Offset(
                         center.x - radius,
-                        center.y - radius * 0.55f
+                        center.y - radius * 0.75f
                     ),
                     end = Offset(
                         center.x + radius,
@@ -264,103 +253,161 @@ fun AuraOrb(
                 )
             )
 
+            // Corriente azul y cian.
+            val blueLayer = organicPath(
+                baseRadius = radius * 0.82f,
+                offset = 3.1f,
+                amount = 0.19f + pulse,
+                frequency = -0.62f
+            )
+
+            drawPath(
+                path = blueLayer,
+                brush = Brush.linearGradient(
+                    colors = listOf(
+                        cyan.copy(alpha = 0.96f * saturation),
+                        blue.copy(alpha = 0.93f),
+                        indigo.copy(alpha = 0.88f),
+                        violet.copy(alpha = 0.65f)
+                    ),
+                    start = Offset(
+                        center.x - radius,
+                        center.y - radius
+                    ),
+                    end = Offset(
+                        center.x + radius,
+                        center.y + radius
+                    )
+                )
+            )
+
+            // Segunda corriente interior.
             val innerWave = organicPath(
-                radius * 0.56f,
-                5.2f,
-                0.25f + pulse,
-                1.22f
+                baseRadius = radius * 0.59f,
+                offset = 5.2f,
+                amount = 0.28f + pulse,
+                frequency = 1.12f,
+                movementPhase = secondaryPhase
             )
 
             drawPath(
                 path = innerWave,
                 brush = Brush.radialGradient(
                     colors = listOf(
-                        Color.White.copy(alpha = 0.70f * energy),
-                        cyan.copy(alpha = 0.70f * saturation),
-                        violet.copy(alpha = 0.34f),
+                        Color.White.copy(alpha = 0.66f * energy),
+                        cyan.copy(alpha = 0.75f * saturation),
+                        violet.copy(alpha = 0.42f),
                         Color.Transparent
                     ),
                     center = Offset(
-                        center.x - radius * 0.08f,
+                        center.x - radius * 0.10f,
                         center.y - radius * 0.12f
                     ),
                     radius = radius * 0.95f
                 )
             )
 
+            // Núcleo cálido que fluye lentamente.
             val warmCurrent = organicPath(
-                radius * 0.43f,
-                2.4f,
-                0.34f,
-                -0.91f
+                baseRadius = radius * 0.39f,
+                offset = 2.4f,
+                amount = 0.30f + pulse,
+                frequency = -0.85f,
+                movementPhase = secondaryPhase
             )
 
             drawPath(
                 path = warmCurrent,
                 brush = Brush.linearGradient(
                     colors = listOf(
-                        coral.copy(alpha = 0.56f * saturation),
-                        magenta.copy(alpha = 0.42f),
-                        violet.copy(alpha = 0.12f)
+                        coral.copy(alpha = 0.62f * saturation),
+                        magenta.copy(alpha = 0.50f),
+                        violet.copy(alpha = 0.18f)
                     ),
                     start = Offset(
-                        center.x - radius * 0.4f,
-                        center.y - radius * 0.5f
+                        center.x - radius * 0.55f,
+                        center.y - radius * 0.55f
                     ),
                     end = Offset(
-                        center.x + radius * 0.7f,
-                        center.y + radius * 0.6f
+                        center.x + radius * 0.65f,
+                        center.y + radius * 0.65f
                     )
                 )
             )
 
+            // Luz central difuminada.
             val highlightCenter = Offset(
                 center.x - radius * 0.18f,
-                center.y - radius * 0.23f
+                center.y - radius * 0.24f
             )
-            val highlightRadius = radius * (0.68f + pulse)
 
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(
-                        Color.White.copy(alpha = 0.88f * energy),
-                        Color(0xFFD9FCFF).copy(alpha = 0.62f * energy),
-                        cyan.copy(alpha = 0.22f),
+                        Color.White.copy(alpha = 0.52f * energy),
+                        Color(0xFFD9FCFF).copy(alpha = 0.38f * energy),
+                        cyan.copy(alpha = 0.17f),
                         Color.Transparent
                     ),
                     center = highlightCenter,
-                    radius = highlightRadius
+                    radius = radius * 0.78f
                 ),
-                radius = highlightRadius,
+                radius = radius * 0.78f,
                 center = highlightCenter
             )
 
+            // Reflejo superior de cristal.
             val reflection = Path().apply {
                 moveTo(
-                    center.x - radius * 0.62f,
-                    center.y - radius * 0.42f
+                    center.x - radius * 0.66f,
+                    center.y - radius * 0.43f
                 )
+
                 cubicTo(
-                    center.x - radius * 0.32f,
+                    center.x - radius * 0.40f,
+                    center.y - radius * 0.88f,
+                    center.x + radius * 0.28f,
                     center.y - radius * 0.91f,
-                    center.x + radius * 0.30f,
-                    center.y - radius * 0.82f,
-                    center.x + radius * 0.61f,
-                    center.y - radius * 0.47f
+                    center.x + radius * 0.64f,
+                    center.y - radius * 0.48f
                 )
             }
 
             drawPath(
                 path = reflection,
-                color = Color.White.copy(alpha = 0.28f),
+                color = Color.White.copy(alpha = 0.34f),
                 style = Stroke(width = 2.1.dp.toPx())
             )
         }
 
-        drawPath(
-            path = silhouette,
-            color = Color.White.copy(alpha = 0.16f),
-            style = Stroke(width = 1.15.dp.toPx())
+        // Borde exterior: círculo fijo, sin deformaciones.
+        drawCircle(
+            color = Color(0xFFB9DFFF).copy(alpha = 0.20f),
+            radius = radius,
+            center = center,
+            style = Stroke(width = 1.3.dp.toPx())
+        )
+
+        drawCircle(
+            brush = Brush.linearGradient(
+                colors = listOf(
+                    Color.White.copy(alpha = 0.42f),
+                    cyan.copy(alpha = 0.24f),
+                    violet.copy(alpha = 0.28f),
+                    Color.White.copy(alpha = 0.12f)
+                ),
+                start = Offset(
+                    center.x - radius,
+                    center.y - radius
+                ),
+                end = Offset(
+                    center.x + radius,
+                    center.y + radius
+                )
+            ),
+            radius = radius - 1.2.dp.toPx(),
+            center = center,
+            style = Stroke(width = 1.6.dp.toPx())
         )
     }
 }
