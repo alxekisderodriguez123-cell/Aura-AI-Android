@@ -1,9 +1,11 @@
+
 package com.aura.ai.assistant
 
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import org.vosk.Model
 import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
@@ -22,17 +24,13 @@ object AuraWakeWordModelInstaller {
     private const val EXPECTED_SHA256 =
         "09b239888f633ef2f0b4e09736e3d9936acfd810bc65d53fad45261762c6511f"
 
-    private const val MAX_ARCHIVE_BYTES =
-        80L * 1024L * 1024L
+    private const val MODEL_ROOT = "vosk-model-small-es-0.42/"
 
-    private const val MAX_EXTRACTED_BYTES =
-        300L * 1024L * 1024L
+    private const val MAX_ARCHIVE_BYTES = 80L * 1024L * 1024L
+    private const val MAX_EXTRACTED_BYTES = 300L * 1024L * 1024L
 
-    private val executor =
-        Executors.newSingleThreadExecutor()
-
-    private val mainHandler =
-        Handler(Looper.getMainLooper())
+    private val executor = Executors.newSingleThreadExecutor()
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     private fun modelDirectory(context: Context) =
         File(context.applicationContext.filesDir, "vosk-model-es")
@@ -45,16 +43,9 @@ object AuraWakeWordModelInstaller {
     fun isModelInstalled(context: Context): Boolean =
         getInstalledModel(context) != null
 
-    fun deleteModel(context: Context): Boolean {
-        return modelDirectory(context).deleteRecursively()
-    }
+    fun deleteModel(context: Context): Boolean =
+        modelDirectory(context).deleteRecursively()
 
-    /**
-     * Descarga e instala el modelo desde la pantalla de configuración.
-     *
-     * onProgress: porcentaje y descripción de la etapa.
-     * onComplete: carpeta instalada o null, más el error si ocurrió.
-     */
     fun installModel(
         context: Context,
         onProgress: (Int, String) -> Unit,
@@ -71,7 +62,11 @@ object AuraWakeWordModelInstaller {
 
                 if (existing != null) {
                     result = existing
-                    reportProgress(onProgress, 100, "El modelo ya está instalado.")
+                    reportProgress(
+                        onProgress,
+                        100,
+                        "El modelo ya está instalado."
+                    )
                 } else {
                     result = installModelInternal(
                         appContext,
@@ -90,16 +85,12 @@ object AuraWakeWordModelInstaller {
         }
     }
 
-    /**
-     * Compatibilidad con el servicio anterior.
-     * Este método solo devuelve un modelo ya instalado.
-     * No inicia descargas automáticas.
-     */
     fun ensureModel(
         context: Context,
         callback: (File?) -> Unit
     ) {
         val result = getInstalledModel(context)
+
         mainHandler.post {
             callback(result)
         }
@@ -109,7 +100,6 @@ object AuraWakeWordModelInstaller {
         context: Context,
         onProgress: (Int, String) -> Unit
     ): File {
-
         val destination = modelDirectory(context)
 
         val zipFile = File(
@@ -132,14 +122,19 @@ object AuraWakeWordModelInstaller {
             partialFile.delete()
             stagingDirectory.deleteRecursively()
 
-            reportProgress(onProgress, 0, "Conectando con el servidor de Vosk…")
-
-            downloadWithRetries(
-                partialFile,
-                onProgress
+            reportProgress(
+                onProgress,
+                0,
+                "Conectando con el servidor de Vosk…"
             )
 
-            reportProgress(onProgress, 78, "Verificando integridad SHA-256…")
+            downloadWithRetries(partialFile, onProgress)
+
+            reportProgress(
+                onProgress,
+                78,
+                "Verificando integridad SHA-256…"
+            )
 
             val actualHash = sha256(partialFile)
 
@@ -163,20 +158,36 @@ object AuraWakeWordModelInstaller {
                 )
             }
 
-            reportProgress(onProgress, 82, "Extrayendo el modelo español…")
-
-            extractModel(
-                zipFile,
-                stagingDirectory
+            reportProgress(
+                onProgress,
+                82,
+                "Extrayendo el modelo español…"
             )
 
-            if (!isValidModel(stagingDirectory)) {
+            extractModel(zipFile, stagingDirectory)
+
+            val missingFiles = getMissingModelFiles(stagingDirectory)
+
+            if (missingFiles.isNotEmpty()) {
                 throw IllegalStateException(
-                    "El modelo extraído está incompleto."
+                    "El modelo está incompleto. Faltan: " +
+                        missingFiles.joinToString(", ")
                 )
             }
 
-            reportProgress(onProgress, 96, "Instalando los archivos…")
+            reportProgress(
+                onProgress,
+                93,
+                "Comprobando el modelo con Vosk…"
+            )
+
+            validateWithVosk(stagingDirectory)
+
+            reportProgress(
+                onProgress,
+                97,
+                "Instalando los archivos…"
+            )
 
             destination.deleteRecursively()
 
@@ -194,7 +205,11 @@ object AuraWakeWordModelInstaller {
                 )
             }
 
-            reportProgress(onProgress, 100, "Modelo español instalado correctamente.")
+            reportProgress(
+                onProgress,
+                100,
+                "Modelo español instalado correctamente."
+            )
 
             Log.i(TAG, "Modelo español instalado y verificado.")
 
@@ -220,10 +235,7 @@ object AuraWakeWordModelInstaller {
             destination.delete()
 
             try {
-                downloadModel(
-                    destination,
-                    onProgress
-                )
+                downloadModel(destination, onProgress)
 
                 if (destination.length() < 10L * 1024L * 1024L) {
                     throw IllegalStateException(
@@ -250,6 +262,7 @@ object AuraWakeWordModelInstaller {
                         0,
                         "Reintentando descarga ($attempt/3)…"
                     )
+
                     Thread.sleep(attempt * 1500L)
                 }
             }
@@ -390,51 +403,64 @@ object AuraWakeWordModelInstaller {
             var entry = zip.nextEntry
 
             while (entry != null) {
-                val entryName = entry.name.replace('\\', '/')
-                val separator = entryName.indexOf('/')
+                var entryName = entry.name.replace('\\', '/')
 
-                if (
-                    separator >= 0 &&
-                    separator < entryName.length - 1
-                ) {
-                    val relativePath =
-                        entryName.substring(separator + 1)
+                while (entryName.startsWith("./")) {
+                    entryName = entryName.removePrefix("./")
+                }
 
-                    if (relativePath.isNotBlank()) {
-                        val outputFile = File(
-                            destination,
-                            relativePath
-                        ).canonicalFile
+                // Solo eliminamos la carpeta raíz conocida del modelo.
+                // No quitamos arbitrariamente el primer segmento.
+                val relativePath = when {
+                    entryName == MODEL_ROOT.removeSuffix("/") -> ""
+                    entryName.startsWith(MODEL_ROOT) ->
+                        entryName.removePrefix(MODEL_ROOT)
+                    else -> entryName
+                }
 
-                        if (!outputFile.path.startsWith(rootPrefix)) {
-                            throw SecurityException(
-                                "Ruta no válida dentro del ZIP."
+                if (relativePath.isNotBlank()) {
+                    val outputFile = File(
+                        destination,
+                        relativePath
+                    ).canonicalFile
+
+                    if (!outputFile.path.startsWith(rootPrefix)) {
+                        throw SecurityException(
+                            "Ruta no válida dentro del ZIP."
+                        )
+                    }
+
+                    if (entry.isDirectory) {
+                        if (!outputFile.mkdirs() &&
+                            !outputFile.isDirectory
+                        ) {
+                            throw IllegalStateException(
+                                "No se pudo crear una carpeta del modelo."
                             )
                         }
+                    } else {
+                        outputFile.parentFile?.mkdirs()
 
-                        if (entry.isDirectory) {
-                            outputFile.mkdirs()
-                        } else {
-                            outputFile.parentFile?.mkdirs()
+                        FileOutputStream(outputFile).use { output ->
+                            val buffer = ByteArray(16384)
 
-                            FileOutputStream(outputFile).use { output ->
-                                val buffer = ByteArray(16384)
+                            while (true) {
+                                val count = zip.read(buffer)
+                                if (count == -1) break
 
-                                while (true) {
-                                    val count = zip.read(buffer)
-                                    if (count == -1) break
+                                extractedBytes += count
 
-                                    extractedBytes += count
-
-                                    if (extractedBytes > MAX_EXTRACTED_BYTES) {
-                                        throw IllegalStateException(
-                                            "El modelo extraído supera el límite."
-                                        )
-                                    }
-
-                                    output.write(buffer, 0, count)
+                                if (extractedBytes > MAX_EXTRACTED_BYTES) {
+                                    throw IllegalStateException(
+                                        "El modelo extraído supera el límite."
+                                    )
                                 }
+
+                                output.write(buffer, 0, count)
                             }
+
+                            output.flush()
+                            output.fd.sync()
                         }
                     }
                 }
@@ -445,10 +471,67 @@ object AuraWakeWordModelInstaller {
         }
     }
 
-    private fun isValidModel(directory: File): Boolean {
-        return File(directory, "am/final.mdl").isFile &&
-            File(directory, "conf/mfcc.conf").isFile &&
-            File(directory, "graph/words.txt").isFile
+    private fun getMissingModelFiles(
+        directory: File
+    ): List<String> {
+        val requiredFiles = listOf(
+            "am/final.mdl",
+            "conf/mfcc.conf",
+            "conf/model.conf",
+            "graph/Gr.fst",
+            "graph/HCLr.fst",
+            "ivector/final.ie"
+        )
+
+        return requiredFiles.filter { relativePath ->
+            val file = File(directory, relativePath)
+            !file.isFile || file.length() <= 0L
+        }
+    }
+
+    private fun isValidModel(directory: File): Boolean =
+        directory.isDirectory &&
+            getMissingModelFiles(directory).isEmpty()
+
+    /**
+     * Comprueba que la biblioteca nativa de Vosk pueda abrir
+     * realmente el modelo antes de dar la instalación por válida.
+     */
+    private fun validateWithVosk(directory: File) {
+        var testModel: Model? = null
+
+        try {
+            testModel = Model(directory.absolutePath)
+
+            Log.i(
+                TAG,
+                "Vosk pudo cargar el modelo español correctamente."
+            )
+
+        } catch (error: Exception) {
+            Log.e(
+                TAG,
+                "Vosk no pudo abrir el modelo extraído.",
+                error
+            )
+
+            throw IllegalStateException(
+                "Los archivos se extrajeron, pero Vosk no pudo abrir el modelo: " +
+                    (error.message ?: "error desconocido"),
+                error
+            )
+
+        } finally {
+            try {
+                testModel?.close()
+            } catch (error: Exception) {
+                Log.w(
+                    TAG,
+                    "No se pudo cerrar el modelo de prueba.",
+                    error
+                )
+            }
+        }
     }
 
     private fun reportProgress(
