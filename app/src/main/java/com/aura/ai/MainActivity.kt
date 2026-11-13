@@ -22,8 +22,6 @@ import com.aura.ai.chat.ChatMessage
 import com.aura.ai.ui.AuraScreen
 import com.aura.ai.voice.AuraVoiceController
 import com.aura.ai.voice.AuraVoiceState
-import com.google.firebase.appcheck.FirebaseAppCheck
-import com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -128,19 +126,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        try {
-            FirebaseAppCheck.getInstance()
-                .installAppCheckProviderFactory(
-                    DebugAppCheckProviderFactory.getInstance()
-                )
-        } catch (e: Exception) {
-            android.util.Log.e(
-                "Aura",
-                "No se pudo inicializar App Check Debug",
-                e
-            )
-        }
 
         chatDatabase = AuraChatDatabase(applicationContext)
         actionEngine = AuraActionEngine(applicationContext)
@@ -295,13 +280,6 @@ class MainActivity : ComponentActivity() {
         chatMessages.add(savedUserMessage)
 
         val command = AuraCommandParser.parse(text)
-
-        if (command == AuraCommand.CopyAppCheckToken) {
-            actionEngine.copyAppCheckToken { result ->
-                finishResponse(result, speakResponse)
-            }
-            return
-        }
 
         if (command != null) {
 
