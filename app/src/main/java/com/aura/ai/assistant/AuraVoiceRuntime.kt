@@ -5,6 +5,7 @@ import android.util.Log
 import com.aura.ai.AuraCerebro
 import com.aura.ai.actions.AuraActionEngine
 import com.aura.ai.actions.AuraCommandParser
+import com.aura.ai.actions.AuraContactCommandParser
 import com.aura.ai.chat.AuraChatDatabase
 import com.aura.ai.chat.ChatMessage
 import com.aura.ai.voice.AuraVoiceController
@@ -78,15 +79,24 @@ class AuraVoiceRuntime(
                     )
                 )
 
-                val command = AuraCommandParser.parse(text)
+                val response = when {
+                    actionEngine.hasPendingWhatsAppMessage() ->
+                        actionEngine.completePendingWhatsAppMessage(text)
 
-                val response = if (command != null) {
-                    actionEngine.execute(command)
-                } else {
-                    cerebro.responder(
-                        pregunta = text,
-                        historialLocal = database.getMessages()
-                    )
+                    else -> {
+                        val command =
+                            AuraContactCommandParser.parse(text)
+                                ?: AuraCommandParser.parse(text)
+
+                        if (command != null) {
+                            actionEngine.execute(command)
+                        } else {
+                            cerebro.responder(
+                                pregunta = text,
+                                historialLocal = database.getMessages()
+                            )
+                        }
+                    }
                 }
 
                 finishResponse(response)
