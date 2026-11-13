@@ -12,6 +12,24 @@ class AuraActionEngine(context: Context) {
     private val media = AuraMediaActions(context.applicationContext)
     private val localMusic = AuraLocalMusicActions(context.applicationContext)
     private val device = AuraDeviceActions(context.applicationContext)
+    private val contacts = AuraContactsActions(context.applicationContext)
+
+    private var pendingWhatsAppNumber: String? = null
+    private var pendingWhatsAppName: String? = null
+
+    fun hasPendingWhatsAppMessage(): Boolean {
+        return pendingWhatsAppNumber != null
+    }
+
+    fun completePendingWhatsAppMessage(message: String): String {
+        val number = pendingWhatsAppNumber
+            ?: return "No tengo ningún mensaje de WhatsApp pendiente."
+
+        pendingWhatsAppNumber = null
+        pendingWhatsAppName = null
+
+        return contacts.prepareWhatsApp(number, message)
+    }
 
     fun execute(command: AuraCommand): String {
         return try {
@@ -70,10 +88,25 @@ class AuraActionEngine(context: Context) {
 
                 is AuraCommand.Sms ->
                     app.sms(command.number)
+
+                is CallContact ->
+                    contacts.callContact(command.contactName)
+
+                is WhatsAppContact -> {
+                    val contact = contacts.findContact(
+                        command.contactName
+                    ) ?: return "No encontré a ${command.contactName} en tus contactos."
+
+                    pendingWhatsAppNumber = contact.number
+                    pendingWhatsAppName = contact.name
+
+                    "Encontré a ${contact.name}. ¿Qué mensaje quieres enviarle?"
+                }
             }
         } catch (e: SecurityException) {
             Log.e("AuraActions", "Permiso denegado", e)
-            "Android bloqueó esta acción por falta de permisos."
+            e.message
+                ?: "Android bloqueó esta acción por falta de permisos."
         } catch (e: Exception) {
             Log.e("AuraActions", "Error ejecutando comando", e)
             "No pude completar la acción: ${e.message ?: "error desconocido"}"
