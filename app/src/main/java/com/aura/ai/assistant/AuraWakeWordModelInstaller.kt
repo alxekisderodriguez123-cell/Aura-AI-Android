@@ -1,546 +1,140 @@
-
 package com.aura.ai.assistant
 
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
-import org.vosk.Model
-import java.io.File
-import java.io.FileOutputStream
-import java.net.HttpURLConnection
-import java.net.URL
-import java.security.MessageDigest
-import java.util.concurrent.Executors
-import java.util.zip.ZipInputStream
+import androidx.core.content.ContextCompat
 
-object AuraWakeWordModelInstaller {
+object AuraWakeWordController {
 
-    private const val TAG = "AuraModelInstaller"
+    private val handler = Handler(Looper.getMainLooper())
+    private var restartRunnable: Runnable? = null
 
-    private const val MODEL_URL =
-        "https://alphacephei.com/vosk/models/vosk-model-small-es-0.42.zip"
+    fun start(context: Context): Boolean {
+        val appContext = context.applicationContext
 
-    private const val EXPECTED_SHA256 =
-        "09b239888f633ef2f0b4e09736e3d9936acfd810bc65d53fad45261762c6511f"
+        cancelScheduledRestart()
 
-    private const val MODEL_ROOT = "vosk-model-small-es-0.42/"
+        if (!AuraWakeWordPreferences.isEnabled(appContext)) {
+            return false
+        }
 
-    private const val MAX_ARCHIVE_BYTES = 80L * 1024L * 1024L
-    private const val MAX_EXTRACTED_BYTES = 300L * 1024L * 1024L
+        if (
+            ContextCompat.checkSelfPermission(
+                appContext,
+                android.Manifest.permission.RECORD_AUDIO
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            android.util.Log.w(
+                "AuraWakeWord",
+                "No hay permiso de micrófono."
+            )
+            return false
+        }
 
-    private val executor = Executors.newSingleThreadExecutor()
-    private val mainHandler = Handler(Looper.getMainLooper())
+        if (!AuraWakeWordModelInstaller.isModelInstalled(appContext)) {
+            android.util.Log.w(
+                "AuraWakeWord",
+                "El modelo español todavía no está instalado."
+            )
+            return false
+        }
 
-    private fun modelDirectory(context: Context) =
-        File(context.applicationContext.filesDir, "vosk-model-es")
+        val intent = Intent(
+            appContext,
+            AuraWakeWordService::class.java
+        )
 
-    fun getInstalledModel(context: Context): File? {
-        val directory = modelDirectory(context)
-        return if (isValidModel(directory)) directory else null
+        return try {
+            if (Build.VERSION.SDK_INT >= 26) {
+                ContextCompat.startForegroundService(
+                    appContext,
+                    intent
+                )
+            } else {
+                appContext.startService(intent)
+            }
+
+            true
+        } catch (error: Exception) {
+            android.util.Log.e(
+                "AuraWakeWord",
+                "No se pudo iniciar la escucha.",
+                error
+            )
+            false
+        }
     }
 
-    fun isModelInstalled(context: Context): Boolean =
-        getInstalledModel(context) != null
+    fun stop(context: Context) {
+        val appContext = context.applicationContext
 
-    fun deleteModel(context: Context): Boolean =
-        modelDirectory(context).deleteRecursively()
+        appContext.stopService(
+            Intent(
+                appContext,
+                AuraWakeWordService::class.java
+            )
+        )
+    }
 
-    fun installModel(
+    /**
+     * Detiene Vosk y espera a que Android libere el micrófono
+     * antes de iniciar el reconocedor de órdenes.
+     */
+    fun stopAndRunAfterRelease(
         context: Context,
-        onProgress: (Int, String) -> Unit,
-        onComplete: (File?, String?) -> Unit
+        action: () -> Unit
     ) {
         val appContext = context.applicationContext
 
-        executor.execute {
-            var result: File? = null
-            var errorMessage: String? = null
+        cancelScheduledRestart()
+        stop(appContext)
 
-            try {
-                val existing = getInstalledModel(appContext)
-
-                if (existing != null) {
-                    result = existing
-                    reportProgress(
-                        onProgress,
-                        100,
-                        "El modelo ya está instalado."
-                    )
-                } else {
-                    result = installModelInternal(
-                        appContext,
-                        onProgress
-                    )
-                }
-            } catch (error: Exception) {
-                Log.e(TAG, "No se pudo instalar el modelo", error)
-                errorMessage = error.message
-                    ?: "No se pudo instalar el modelo."
-            }
-
-            mainHandler.post {
-                onComplete(result, errorMessage)
-            }
-        }
-    }
-
-    fun ensureModel(
-        context: Context,
-        callback: (File?) -> Unit
-    ) {
-        val result = getInstalledModel(context)
-
-        mainHandler.post {
-            callback(result)
-        }
-    }
-
-    private fun installModelInternal(
-        context: Context,
-        onProgress: (Int, String) -> Unit
-    ): File {
-        val destination = modelDirectory(context)
-
-        val zipFile = File(
-            context.cacheDir,
-            "vosk-spanish-model.zip"
-        )
-
-        val partialFile = File(
-            context.cacheDir,
-            "vosk-spanish-model.zip.part"
-        )
-
-        val stagingDirectory = File(
-            context.filesDir,
-            "vosk-model-es-installing"
-        )
-
-        try {
-            zipFile.delete()
-            partialFile.delete()
-            stagingDirectory.deleteRecursively()
-
-            reportProgress(
-                onProgress,
-                0,
-                "Conectando con el servidor de Vosk…"
-            )
-
-            downloadWithRetries(partialFile, onProgress)
-
-            reportProgress(
-                onProgress,
-                78,
-                "Verificando integridad SHA-256…"
-            )
-
-            val actualHash = sha256(partialFile)
-
-            if (!actualHash.equals(EXPECTED_SHA256, true)) {
-                throw SecurityException(
-                    "La verificación SHA-256 del modelo no coincide."
-                )
-            }
-
-            if (!partialFile.renameTo(zipFile)) {
-                throw IllegalStateException(
-                    "No se pudo preparar el archivo ZIP."
-                )
-            }
-
-            if (!stagingDirectory.mkdirs() &&
-                !stagingDirectory.isDirectory
-            ) {
-                throw IllegalStateException(
-                    "No se pudo crear la carpeta temporal."
-                )
-            }
-
-            reportProgress(
-                onProgress,
-                82,
-                "Extrayendo el modelo español…"
-            )
-
-            extractModel(zipFile, stagingDirectory)
-
-            val missingFiles = getMissingModelFiles(stagingDirectory)
-
-            if (missingFiles.isNotEmpty()) {
-                throw IllegalStateException(
-                    "El modelo está incompleto. Faltan: " +
-                        missingFiles.joinToString(", ")
-                )
-            }
-
-            reportProgress(
-                onProgress,
-                93,
-                "Comprobando el modelo con Vosk…"
-            )
-
-            validateWithVosk(stagingDirectory)
-
-            reportProgress(
-                onProgress,
-                97,
-                "Instalando los archivos…"
-            )
-
-            destination.deleteRecursively()
-
-            if (!stagingDirectory.renameTo(destination)) {
-                throw IllegalStateException(
-                    "No se pudo instalar el modelo."
-                )
-            }
-
-            if (!isValidModel(destination)) {
-                destination.deleteRecursively()
-
-                throw IllegalStateException(
-                    "La instalación final no es válida."
-                )
-            }
-
-            reportProgress(
-                onProgress,
-                100,
-                "Modelo español instalado correctamente."
-            )
-
-            Log.i(TAG, "Modelo español instalado y verificado.")
-
-            return destination
-
-        } finally {
-            zipFile.delete()
-            partialFile.delete()
-
-            if (!isValidModel(destination)) {
-                stagingDirectory.deleteRecursively()
-            }
-        }
-    }
-
-    private fun downloadWithRetries(
-        destination: File,
-        onProgress: (Int, String) -> Unit
-    ) {
-        var lastError: Exception? = null
-
-        for (attempt in 1..3) {
-            destination.delete()
-
-            try {
-                downloadModel(destination, onProgress)
-
-                if (destination.length() < 10L * 1024L * 1024L) {
-                    throw IllegalStateException(
-                        "El archivo descargado es demasiado pequeño."
-                    )
-                }
-
-                return
-
-            } catch (error: Exception) {
-                lastError = error
-
-                Log.w(
-                    TAG,
-                    "Falló la descarga. Intento $attempt de 3.",
-                    error
-                )
-
-                destination.delete()
-
-                if (attempt < 3) {
-                    reportProgress(
-                        onProgress,
-                        0,
-                        "Reintentando descarga ($attempt/3)…"
-                    )
-
-                    Thread.sleep(attempt * 1500L)
-                }
-            }
-        }
-
-        throw IllegalStateException(
-            "No se pudo descargar el modelo después de tres intentos.",
-            lastError
+        handler.postDelayed(
+            {
+                action()
+            },
+            900L
         )
     }
-
-    private fun downloadModel(
-        destination: File,
-        onProgress: (Int, String) -> Unit
-    ) {
-        val connection = URL(MODEL_URL)
-            .openConnection() as HttpURLConnection
-
-        connection.instanceFollowRedirects = true
-        connection.connectTimeout = 30000
-        connection.readTimeout = 120000
-        connection.requestMethod = "GET"
-
-        connection.setRequestProperty(
-            "User-Agent",
-            "Aura-Android/1.0"
-        )
-
-        try {
-            connection.connect()
-
-            if (connection.responseCode != HttpURLConnection.HTTP_OK) {
-                throw IllegalStateException(
-                    "Error HTTP ${connection.responseCode}"
-                )
-            }
-
-            val contentLength = connection.contentLengthLong
-
-            if (contentLength > MAX_ARCHIVE_BYTES) {
-                throw IllegalStateException(
-                    "El ZIP supera el límite permitido."
-                )
-            }
-
-            var totalBytes = 0L
-            var lastReported = -1
-
-            connection.inputStream.use { input ->
-                FileOutputStream(destination).use { output ->
-
-                    val buffer = ByteArray(16384)
-
-                    while (true) {
-                        val count = input.read(buffer)
-                        if (count == -1) break
-
-                        totalBytes += count
-
-                        if (totalBytes > MAX_ARCHIVE_BYTES) {
-                            throw IllegalStateException(
-                                "La descarga superó el límite permitido."
-                            )
-                        }
-
-                        output.write(buffer, 0, count)
-
-                        if (contentLength > 0L) {
-                            val percent = (
-                                totalBytes * 75L / contentLength
-                            ).toInt().coerceIn(0, 75)
-
-                            if (percent != lastReported) {
-                                lastReported = percent
-
-                                reportProgress(
-                                    onProgress,
-                                    percent,
-                                    "Descargando modelo español…"
-                                )
-                            }
-                        } else {
-                            reportProgress(
-                                onProgress,
-                                10,
-                                "Descargando modelo español…"
-                            )
-                        }
-                    }
-
-                    output.flush()
-                    output.fd.sync()
-                }
-            }
-
-            if (totalBytes <= 0L) {
-                throw IllegalStateException(
-                    "El archivo descargado está vacío."
-                )
-            }
-
-        } finally {
-            connection.disconnect()
-        }
-    }
-
-    private fun sha256(file: File): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-
-        file.inputStream().buffered().use { input ->
-            val buffer = ByteArray(16384)
-
-            while (true) {
-                val count = input.read(buffer)
-                if (count == -1) break
-                digest.update(buffer, 0, count)
-            }
-        }
-
-        return digest.digest().joinToString("") {
-            "%02x".format(it)
-        }
-    }
-
-    private fun extractModel(
-        zipFile: File,
-        destination: File
-    ) {
-        val root = destination.canonicalFile
-        val rootPrefix = root.path + File.separator
-
-        var extractedBytes = 0L
-
-        ZipInputStream(
-            zipFile.inputStream().buffered()
-        ).use { zip ->
-
-            var entry = zip.nextEntry
-
-            while (entry != null) {
-                var entryName = entry.name.replace('\\', '/')
-
-                while (entryName.startsWith("./")) {
-                    entryName = entryName.removePrefix("./")
-                }
-
-                // Solo eliminamos la carpeta raíz conocida del modelo.
-                // No quitamos arbitrariamente el primer segmento.
-                val relativePath = when {
-                    entryName == MODEL_ROOT.removeSuffix("/") -> ""
-                    entryName.startsWith(MODEL_ROOT) ->
-                        entryName.removePrefix(MODEL_ROOT)
-                    else -> entryName
-                }
-
-                if (relativePath.isNotBlank()) {
-                    val outputFile = File(
-                        destination,
-                        relativePath
-                    ).canonicalFile
-
-                    if (!outputFile.path.startsWith(rootPrefix)) {
-                        throw SecurityException(
-                            "Ruta no válida dentro del ZIP."
-                        )
-                    }
-
-                    if (entry.isDirectory) {
-                        if (!outputFile.mkdirs() &&
-                            !outputFile.isDirectory
-                        ) {
-                            throw IllegalStateException(
-                                "No se pudo crear una carpeta del modelo."
-                            )
-                        }
-                    } else {
-                        outputFile.parentFile?.mkdirs()
-
-                        FileOutputStream(outputFile).use { output ->
-                            val buffer = ByteArray(16384)
-
-                            while (true) {
-                                val count = zip.read(buffer)
-                                if (count == -1) break
-
-                                extractedBytes += count
-
-                                if (extractedBytes > MAX_EXTRACTED_BYTES) {
-                                    throw IllegalStateException(
-                                        "El modelo extraído supera el límite."
-                                    )
-                                }
-
-                                output.write(buffer, 0, count)
-                            }
-
-                            output.flush()
-                            output.fd.sync()
-                        }
-                    }
-                }
-
-                zip.closeEntry()
-                entry = zip.nextEntry
-            }
-        }
-    }
-
-    private fun getMissingModelFiles(
-        directory: File
-    ): List<String> {
-        val requiredFiles = listOf(
-            "am/final.mdl",
-            "conf/mfcc.conf",
-            "conf/model.conf",
-            "graph/Gr.fst",
-            "graph/HCLr.fst",
-            "ivector/final.ie"
-        )
-
-        return requiredFiles.filter { relativePath ->
-            val file = File(directory, relativePath)
-            !file.isFile || file.length() <= 0L
-        }
-    }
-
-    private fun isValidModel(directory: File): Boolean =
-        directory.isDirectory &&
-            getMissingModelFiles(directory).isEmpty()
 
     /**
-     * Comprueba que la biblioteca nativa de Vosk pueda abrir
-     * realmente el modelo antes de dar la instalación por válida.
+     * Reactiva Vosk después de terminar una conversación.
+     * Si el usuario vuelve a hablar antes, start() cancela
+     * esta reactivación pendiente.
      */
-    private fun validateWithVosk(directory: File) {
-        var testModel: Model? = null
+    fun restartAfterRelease(
+        context: Context,
+        delayMillis: Long = 1000L
+    ) {
+        val appContext = context.applicationContext
 
-        try {
-            testModel = Model(directory.absolutePath)
+        cancelScheduledRestart()
 
-            Log.i(
-                TAG,
-                "Vosk pudo cargar el modelo español correctamente."
-            )
+        val task = Runnable {
+            restartRunnable = null
 
-        } catch (error: Exception) {
-            Log.e(
-                TAG,
-                "Vosk no pudo abrir el modelo extraído.",
-                error
-            )
-
-            throw IllegalStateException(
-                "Los archivos se extrajeron, pero Vosk no pudo abrir el modelo: " +
-                    (error.message ?: "error desconocido"),
-                error
-            )
-
-        } finally {
-            try {
-                testModel?.close()
-            } catch (error: Exception) {
-                Log.w(
-                    TAG,
-                    "No se pudo cerrar el modelo de prueba.",
-                    error
-                )
+            if (AuraWakeWordPreferences.isEnabled(appContext)) {
+                start(appContext)
             }
         }
+
+        restartRunnable = task
+
+        handler.postDelayed(
+            task,
+            delayMillis
+        )
     }
 
-    private fun reportProgress(
-        callback: (Int, String) -> Unit,
-        percent: Int,
-        message: String
-    ) {
-        mainHandler.post {
-            callback(percent, message)
+    fun cancelScheduledRestart() {
+        restartRunnable?.let {
+            handler.removeCallbacks(it)
         }
+
+        restartRunnable = null
     }
 }
