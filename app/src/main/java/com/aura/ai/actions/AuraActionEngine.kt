@@ -12,7 +12,6 @@ class AuraActionEngine(context: Context) {
     private val media = AuraMediaActions(context.applicationContext)
     private val localMusic = AuraLocalMusicActions(context.applicationContext)
     private val device = AuraDeviceActions(context.applicationContext)
-    private val appCheckToken = AuraAppCheckToken(context.applicationContext)
 
     fun execute(command: AuraCommand): String {
         return try {
@@ -66,9 +65,6 @@ class AuraActionEngine(context: Context) {
                 AuraCommand.OpenSettings ->
                     device.settings()
 
-                AuraCommand.CopyAppCheckToken ->
-                    "Estoy solicitando el token de App Check."
-
                 is AuraCommand.Dial ->
                     app.dial(command.number)
 
@@ -82,9 +78,5 @@ class AuraActionEngine(context: Context) {
             Log.e("AuraActions", "Error ejecutando comando", e)
             "No pude completar la acción: ${e.message ?: "error desconocido"}"
         }
-    }
-
-    fun copyAppCheckToken(onResult: (String) -> Unit) {
-        appCheckToken.copyDebugToken(onResult)
     }
 }
