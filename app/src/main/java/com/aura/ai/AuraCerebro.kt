@@ -1,37 +1,28 @@
+
 package com.aura.ai
 
 import android.content.Context
 import android.util.Log
 import com.aura.ai.chat.ChatMessage
-import com.google.firebase.Firebase
-import com.google.firebase.ai.ai
-import com.google.firebase.ai.type.GenerativeBackend
-import com.google.firebase.ai.type.Tool
-import com.google.firebase.ai.type.content
-import com.google.firebase.ai.type.generationConfig
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
-
-private data class AuraModelConfig(
-    val name: String,
-    val search: Boolean
-)
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.IOException
+import java.net.HttpURLConnection
+import java.net.URL
 
 class AuraCerebro(context: Context) {
 
     companion object {
         private const val TAG = "AuraCerebro"
-        private const val TIMEOUT_MS = 35000L
+        private const val TIMEOUT_MS = 45000L
         private const val MAX_HISTORY = 16
 
-        private val MODELS = listOf(
-            AuraModelConfig("gemini-3.5-flash-lite", true),
-            AuraModelConfig("gemini-3.5-flash-lite", false),
-            AuraModelConfig("gemini-3.1-flash-lite", false)
-        )
+        private const val API_URL =
+            "https://floral-flower-7178.alxekisderodriguez123.workers.dev/v1/chat"
     }
 
     private val appContext = context.applicationContext
@@ -50,199 +41,149 @@ class AuraCerebro(context: Context) {
         try {
             withTimeout(TIMEOUT_MS) {
 
-                val history = historialLocal
+                val history = JSONArray()
+
+                historialLocal
                     .takeLast(MAX_HISTORY)
                     .filter { it.text.isNotBlank() }
-                    .map { message ->
-                        content(
-                            if (message.isUser) "user" else "model"
-                        ) {
-                            text(message.text)
-                        }
-                    }
-
-                var lastError: Exception? = null
-
-                for (config in MODELS) {
-                    try {
-                        val model = Firebase.ai(
-                            backend = GenerativeBackend.googleAI()
-                        ).generativeModel(
-                            modelName = config.name,
-                            generationConfig = generationConfig {
-                                maxOutputTokens = 700
-                                temperature = 0.7f
-                            },
-                            tools = if (config.search) {
-                                listOf(Tool.googleSearch())
-                            } else {
-                                null
-                            },
-                            systemInstruction = content {
-                                text(systemPrompt(config.search))
+                    .forEach { message ->
+                        history.put(
+                            JSONObject().apply {
+                                put(
+                                    "role",
+                                    if (message.isUser) "user" else "model"
+                                )
+                                put("text", message.text)
                             }
                         )
-
-                        val chat = model.startChat(history)
-                        val result = chat.sendMessage(pregunta)
-                        val answer = clean(result.text.orEmpty())
-
-                        ultimoDetalle = config.name +
-                            if (config.search) {
-                                " · Google Search"
-                            } else {
-                                " · Sin búsqueda web"
-                            }
-
-                        return@withTimeout if (answer.isBlank()) {
-                            "No encontré una respuesta para eso."
-                        } else {
-                            answer
-                        }
-
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        lastError = e
-
-                        Log.e(
-                            TAG,
-                            "Falló ${config.name}, búsqueda=${config.search}",
-                            e
-                        )
-
-                        if (!canRetry(e)) {
-                            throw e
-                        }
                     }
+
+                val payload = JSONObject().apply {
+                    put("question", pregunta.trim())
+                    put("history", history)
                 }
 
-                throw lastError
-                    ?: IllegalStateException("No hay modelos disponibles")
+                val connection =
+                    (URL(API_URL).openConnection() as HttpURLConnection)
+
+                try {
+                    connection.requestMethod = "POST"
+                    connection.connectTimeout = 15000
+                    connection.readTimeout = 40000
+                    connection.doOutput = true
+
+                    connection.setRequestProperty(
+                        "Content-Type",
+                        "application/json; charset=utf-8"
+                    )
+
+                    connection.setRequestProperty(
+                        "Accept",
+                        "application/json"
+                    )
+
+                    connection.outputStream.use { output ->
+                        output.write(
+                            payload.toString().toByteArray(Charsets.UTF_8)
+                        )
+                        output.flush()
+                    }
+
+                    val status = connection.responseCode
+
+                    val responseStream =
+                        if (status in 200..299) {
+                            connection.inputStream
+                        } else {
+                            connection.errorStream
+                        }
+
+                    val responseText = responseStream
+                        ?.bufferedReader(Charsets.UTF_8)
+                        ?.use { it.readText() }
+                        .orEmpty()
+
+                    val response = try {
+                        JSONObject(responseText)
+                    } catch (error: Exception) {
+                        throw IOException(
+                            "El servidor devolvió una respuesta no válida."
+                        )
+                    }
+
+                    if (status !in 200..299) {
+                        val serverError = response.optString(
+                            "error",
+                            "Error del servidor."
+                        )
+
+                        ultimoDetalle = "HTTP $status: $serverError"
+
+                        throw IOException(
+                            errorMessage(status, serverError)
+                        )
+                    }
+
+                    val answer = response.optString("text", "").trim()
+
+                    if (answer.isBlank()) {
+                        throw IOException(
+                            "El servidor no devolvió una respuesta."
+                        )
+                    }
+
+                    val model = response.optString("model", "Gemini")
+                    val search = response.optBoolean("search", false)
+
+                    ultimoDetalle = model +
+                        if (search) {
+                            " · Google Search"
+                        } else {
+                            " · Sin búsqueda web"
+                        }
+
+                    answer
+
+                } finally {
+                    connection.disconnect()
+                }
             }
 
-        } catch (e: TimeoutCancellationException) {
+        } catch (error: TimeoutCancellationException) {
             ultimoDetalle = "Tiempo de espera agotado"
             "La respuesta está tardando demasiado. Inténtalo otra vez."
 
-        } catch (e: CancellationException) {
-            throw e
+        } catch (error: Exception) {
+            Log.e(TAG, "Error conectando con Aura Cloud", error)
 
-        } catch (e: Exception) {
-            Log.e(TAG, "Error de Gemini", e)
+            if (ultimoDetalle.isBlank()) {
+                ultimoDetalle =
+                    "${error.javaClass.simpleName}: ${error.message.orEmpty()}"
+            }
 
-            ultimoDetalle =
-                "${e.javaClass.simpleName}: ${e.message.orEmpty().take(180)}"
-
-            errorMessage(e)
+            error.message
+                ?.takeIf { it.isNotBlank() }
+                ?: "No pude conectar con mi motor de inteligencia."
         }
     }
 
-    private fun systemPrompt(searchAvailable: Boolean): String {
-        val internetInstructions = if (searchAvailable) {
-            """
-            Puedes consultar información actual mediante Google Search.
-            Cuando la pregunta requiera información reciente, utiliza la búsqueda.
-            Distingue los hechos confirmados de las estimaciones.
-            """.trimIndent()
-        } else {
-            """
-            No tienes búsqueda web disponible en esta solicitud.
-            No afirmes haber consultado Internet.
-            """.trimIndent()
-        }
-
-        return """
-            Eres Aura, una asistente personal inteligente de Android.
-
-            IDENTIDAD:
-            - Tu nombre es Aura.
-            - Eres la asistente personal del usuario.
-            - Hablas español natural, claro y conversacional.
-
-            COMPORTAMIENTO:
-            - Responde directamente.
-            - Mantén el contexto de los mensajes anteriores.
-            - No repitas innecesariamente lo que dice el usuario.
-            - No inventes recuerdos, datos ni resultados.
-            - No respondas como un robot.
-            - Adapta la extensión de la respuesta a la pregunta.
-
-            ACCIONES:
-            - Las acciones del teléfono son ejecutadas por el motor local de Aura.
-            - No afirmes que abriste una aplicación, configuraste una alarma,
-              iniciaste una ruta o reprodujiste música si el motor local
-              no confirmó esa acción.
-            - Si no puedes realizar una acción, explica la limitación.
-            - No inventes permisos ni capacidades de Android.
-
-            INTERNET:
-            $internetInstructions
-        """.trimIndent()
-    }
-
-    private fun canRetry(exception: Exception): Boolean {
-        val error = exceptionText(exception)
-
-        return !(
-            "app check" in error ||
-            "appcheck" in error ||
-            "app_check" in error ||
-            "unknownhost" in error ||
-            "unable to resolve" in error ||
-            "network" in error ||
-            "ioexception" in error ||
-            "timeout" in error
-        )
-    }
-
-    private fun errorMessage(exception: Exception): String {
-        val error = exceptionText(exception)
-
-        return when {
-            "app check" in error ||
-            "appcheck" in error ||
-            "app_check" in error ->
-                "Necesito que registres el token de App Check de Aura en Firebase."
-
-            "quota" in error ||
-            "429" in error ||
-            "exhausted" in error ->
-                "Alcancé el límite gratuito de solicitudes. Puedes seguir usando mis comandos locales."
-
-            "404" in error ||
-            "not found" in error ->
-                "El modelo de inteligencia no está disponible actualmente."
-
-            "403" in error ||
-            "permission" in error ||
-            "servicedisabled" in error ->
-                "Firebase rechazó la solicitud. Revisa la configuración del proyecto."
-
-            "apikey" in error ||
-            "api key" in error ->
-                "Firebase rechazó la configuración de acceso."
-
-            "unknownhost" in error ||
-            "unable to resolve" in error ||
-            "network" in error ||
-            "connect" in error ||
-            "ioexception" in error ->
-                "No tengo conexión a Internet. Mis comandos locales siguen disponibles."
-
-            else ->
-                "No pude conectar con mi motor de inteligencia."
+    private fun errorMessage(
+        status: Int,
+        serverError: String
+    ): String {
+        return when (status) {
+            400 -> "La solicitud enviada al servidor no es válida."
+            413 -> "La conversación es demasiado extensa."
+            429 -> "Se alcanzó el límite de solicitudes. Espera un momento."
+            500 -> "El servidor de Aura tiene un problema de configuración."
+            502 -> {
+                if (serverError.contains("Gemini", ignoreCase = true)) {
+                    "No pude obtener una respuesta de Gemini. Inténtalo más tarde."
+                } else {
+                    "El servidor de Aura no pudo completar la solicitud."
+                }
+            }
+            else -> "Error de conexión con Aura Cloud (HTTP $status)."
         }
     }
-
-    private fun exceptionText(exception: Exception): String =
-        "${exception.javaClass.simpleName} ${exception.message.orEmpty()}"
-            .lowercase()
-
-    private fun clean(value: String): String =
-        value
-            .replace(Regex("(?m)^\\s*[-•]\\s+"), "")
-            .replace(Regex("[*_`#>~]+"), "")
-            .replace(Regex("\\s+"), " ")
-            .trim()
 }
