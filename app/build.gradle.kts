@@ -101,7 +101,6 @@ dependencies {
     implementation("androidx.media3:media3-session:1.11.1")
 
     implementation(platform("com.google.firebase:firebase-bom:35.1.0"))
-    implementation("com.google.firebase:firebase-ai")
 
     implementation("com.alphacephei:vosk-android:0.3.75")
 
