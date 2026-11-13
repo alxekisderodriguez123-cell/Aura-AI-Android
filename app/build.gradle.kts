@@ -1,3 +1,4 @@
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -106,10 +107,6 @@ dependencies {
 
     implementation(
         "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2"
-    )
-
-    debugImplementation(
-        "com.google.firebase:firebase-appcheck-debug"
     )
 
     debugImplementation(libs.androidx.compose.ui.tooling)
