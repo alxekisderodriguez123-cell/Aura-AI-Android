@@ -1,4 +1,3 @@
-
 package com.aura.ai.actions
 
 import java.text.Normalizer
@@ -44,7 +43,6 @@ sealed class AuraCommand {
     data object Bluetooth : AuraCommand()
     data object Internet : AuraCommand()
     data object OpenSettings : AuraCommand()
-    data object CopyAppCheckToken : AuraCommand()
 
     data class Dial(val number: String) : AuraCommand()
 
@@ -105,15 +103,6 @@ object AuraCommandParser {
             .replace(Regex("^hey aura\\s*"), "")
             .replace(Regex("^hola aura\\s*"), "")
             .replace(Regex("^aura\\s*"), "")
-
-        if (
-            text.contains("copia el token") ||
-            text.contains("copiar token") ||
-            text.contains("token de app check") ||
-            text.contains("token appcheck")
-        ) {
-            return AuraCommand.CopyAppCheckToken
-        }
 
         // Navegación: inicia una ruta en Google Maps.
         val route = Regex(
