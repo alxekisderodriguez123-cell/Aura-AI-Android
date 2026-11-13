@@ -4,7 +4,6 @@ import android.content.Context
 import android.util.Log
 import com.aura.ai.AuraCerebro
 import com.aura.ai.actions.AuraActionEngine
-import com.aura.ai.actions.AuraCommand
 import com.aura.ai.actions.AuraCommandParser
 import com.aura.ai.chat.AuraChatDatabase
 import com.aura.ai.chat.ChatMessage
@@ -80,13 +79,6 @@ class AuraVoiceRuntime(
                 )
 
                 val command = AuraCommandParser.parse(text)
-
-                if (command == AuraCommand.CopyAppCheckToken) {
-                    actionEngine.copyAppCheckToken { result ->
-                        finishResponse(result)
-                    }
-                    return@launch
-                }
 
                 val response = if (command != null) {
                     actionEngine.execute(command)
