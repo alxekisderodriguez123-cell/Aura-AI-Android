@@ -6,33 +6,51 @@ import com.aura.ai.media.AuraLocalMusicActions
 
 class AuraActionEngine(context: Context) {
 
-    private val app = AuraAppActions(context.applicationContext)
-    private val clock = AuraClockActions(context.applicationContext)
-    private val maps = AuraMapsActions(context.applicationContext)
-    private val media = AuraMediaActions(context.applicationContext)
-    private val localMusic = AuraLocalMusicActions(context.applicationContext)
-    private val device = AuraDeviceActions(context.applicationContext)
-    private val contacts = AuraContactsActions(context.applicationContext)
+    private val app =
+        AuraAppActions(context.applicationContext)
+
+    private val clock =
+        AuraClockActions(context.applicationContext)
+
+    private val maps =
+        AuraMapsActions(context.applicationContext)
+
+    private val media =
+        AuraMediaActions(context.applicationContext)
+
+    private val localMusic =
+        AuraLocalMusicActions(context.applicationContext)
+
+    private val device =
+        AuraDeviceActions(context.applicationContext)
+
+    private val contacts =
+        AuraContactsActions(context.applicationContext)
 
     private var pendingWhatsAppNumber: String? = null
-    private var pendingWhatsAppName: String? = null
 
     fun hasPendingWhatsAppMessage(): Boolean {
         return pendingWhatsAppNumber != null
     }
 
-    fun completePendingWhatsAppMessage(message: String): String {
+    fun completePendingWhatsAppMessage(
+        message: String
+    ): String {
+
         val number = pendingWhatsAppNumber
             ?: return "No tengo ningún mensaje de WhatsApp pendiente."
 
         pendingWhatsAppNumber = null
-        pendingWhatsAppName = null
 
-        return contacts.prepareWhatsApp(number, message)
+        return contacts.prepareWhatsApp(
+            number = number,
+            message = message
+        )
     }
 
     fun execute(command: AuraCommand): String {
         return try {
+
             when (command) {
 
                 is AuraCommand.OpenApp ->
@@ -42,7 +60,10 @@ class AuraActionEngine(context: Context) {
                     clock.startTimer(command.seconds)
 
                 is AuraCommand.SetAlarm ->
-                    clock.setAlarm(command.hour, command.minute)
+                    clock.setAlarm(
+                        command.hour,
+                        command.minute
+                    )
 
                 is AuraCommand.Navigate ->
                     maps.navigate(command.destination)
@@ -51,7 +72,10 @@ class AuraActionEngine(context: Context) {
                     maps.search(command.query)
 
                 is AuraCommand.SearchYouTube ->
-                    media.youtube(command.query, command.play)
+                    media.youtube(
+                        command.query,
+                        command.play
+                    )
 
                 is AuraCommand.SearchYouTubeMusic ->
                     localMusic.playLocalOrFallback(
@@ -60,7 +84,10 @@ class AuraActionEngine(context: Context) {
                     )
 
                 is AuraCommand.SearchSpotify ->
-                    media.spotify(command.query, command.play)
+                    media.spotify(
+                        command.query,
+                        command.play
+                    )
 
                 is AuraCommand.SearchGoogle ->
                     media.google(command.query)
@@ -89,27 +116,71 @@ class AuraActionEngine(context: Context) {
                 is AuraCommand.Sms ->
                     app.sms(command.number)
 
-                is CallContact ->
-                    contacts.callContact(command.contactName)
+                // Contactos.
+                is FindContact ->
+                    contacts.describeContact(
+                        command.contactName
+                    )
 
+                is GetContactNumber ->
+                    contacts.getContactNumber(
+                        command.contactName
+                    )
+
+                // Llamadas directas: comportamiento conservado.
+                is CallContact ->
+                    contacts.callContact(
+                        command.contactName
+                    )
+
+                // WhatsApp.
                 is WhatsAppContact -> {
+
                     val contact = contacts.findContact(
                         command.contactName
                     ) ?: return "No encontré a ${command.contactName} en tus contactos."
 
-                    pendingWhatsAppNumber = contact.number
-                    pendingWhatsAppName = contact.name
+                    val message = command.message
 
-                    "Encontré a ${contact.name}. ¿Qué mensaje quieres enviarle?"
+                    if (!message.isNullOrBlank()) {
+
+                        contacts.prepareWhatsApp(
+                            number = contact.number,
+                            message = message
+                        )
+
+                    } else {
+
+                        pendingWhatsAppNumber =
+                            contact.number
+
+                        "Encontré a ${contact.name}. ¿Qué mensaje quieres enviarle?"
+                    }
                 }
             }
-        } catch (e: SecurityException) {
-            Log.e("AuraActions", "Permiso denegado", e)
-            e.message
+
+        } catch (error: SecurityException) {
+
+            Log.e(
+                "AuraActions",
+                "Permiso denegado",
+                error
+            )
+
+            error.message
                 ?: "Android bloqueó esta acción por falta de permisos."
-        } catch (e: Exception) {
-            Log.e("AuraActions", "Error ejecutando comando", e)
-            "No pude completar la acción: ${e.message ?: "error desconocido"}"
+
+        } catch (error: Exception) {
+
+            Log.e(
+                "AuraActions",
+                "Error ejecutando comando",
+                error
+            )
+
+            "No pude completar la acción: ${
+                error.message ?: "error desconocido"
+            }"
         }
     }
 }
