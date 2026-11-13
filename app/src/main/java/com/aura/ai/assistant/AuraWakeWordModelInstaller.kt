@@ -34,49 +34,83 @@ object AuraWakeWordModelInstaller {
     private val mainHandler =
         Handler(Looper.getMainLooper())
 
-    fun ensureModel(
+    private fun modelDirectory(context: Context) =
+        File(context.applicationContext.filesDir, "vosk-model-es")
+
+    fun getInstalledModel(context: Context): File? {
+        val directory = modelDirectory(context)
+        return if (isValidModel(directory)) directory else null
+    }
+
+    fun isModelInstalled(context: Context): Boolean =
+        getInstalledModel(context) != null
+
+    fun deleteModel(context: Context): Boolean {
+        return modelDirectory(context).deleteRecursively()
+    }
+
+    /**
+     * Descarga e instala el modelo desde la pantalla de configuración.
+     *
+     * onProgress: porcentaje y descripción de la etapa.
+     * onComplete: carpeta instalada o null, más el error si ocurrió.
+     */
+    fun installModel(
         context: Context,
-        callback: (File?) -> Unit
+        onProgress: (Int, String) -> Unit,
+        onComplete: (File?, String?) -> Unit
     ) {
         val appContext = context.applicationContext
 
         executor.execute {
             var result: File? = null
+            var errorMessage: String? = null
 
             try {
-                val destination = File(
-                    appContext.filesDir,
-                    "vosk-model-es"
-                )
+                val existing = getInstalledModel(appContext)
 
-                if (isValidModel(destination)) {
-                    result = destination
+                if (existing != null) {
+                    result = existing
+                    reportProgress(onProgress, 100, "El modelo ya está instalado.")
                 } else {
-                    destination.deleteRecursively()
-                    result = installModel(
+                    result = installModelInternal(
                         appContext,
-                        destination
+                        onProgress
                     )
                 }
-
             } catch (error: Exception) {
-                Log.e(
-                    TAG,
-                    "No se pudo instalar el modelo",
-                    error
-                )
+                Log.e(TAG, "No se pudo instalar el modelo", error)
+                errorMessage = error.message
+                    ?: "No se pudo instalar el modelo."
             }
 
             mainHandler.post {
-                callback(result)
+                onComplete(result, errorMessage)
             }
         }
     }
 
-    private fun installModel(
+    /**
+     * Compatibilidad con el servicio anterior.
+     * Este método solo devuelve un modelo ya instalado.
+     * No inicia descargas automáticas.
+     */
+    fun ensureModel(
         context: Context,
-        destination: File
+        callback: (File?) -> Unit
+    ) {
+        val result = getInstalledModel(context)
+        mainHandler.post {
+            callback(result)
+        }
+    }
+
+    private fun installModelInternal(
+        context: Context,
+        onProgress: (Int, String) -> Unit
     ): File {
+
+        val destination = modelDirectory(context)
 
         val zipFile = File(
             context.cacheDir,
@@ -98,7 +132,14 @@ object AuraWakeWordModelInstaller {
             partialFile.delete()
             stagingDirectory.deleteRecursively()
 
-            downloadWithRetries(partialFile)
+            reportProgress(onProgress, 0, "Conectando con el servidor de Vosk…")
+
+            downloadWithRetries(
+                partialFile,
+                onProgress
+            )
+
+            reportProgress(onProgress, 78, "Verificando integridad SHA-256…")
 
             val actualHash = sha256(partialFile)
 
@@ -122,6 +163,8 @@ object AuraWakeWordModelInstaller {
                 )
             }
 
+            reportProgress(onProgress, 82, "Extrayendo el modelo español…")
+
             extractModel(
                 zipFile,
                 stagingDirectory
@@ -132,6 +175,8 @@ object AuraWakeWordModelInstaller {
                     "El modelo extraído está incompleto."
                 )
             }
+
+            reportProgress(onProgress, 96, "Instalando los archivos…")
 
             destination.deleteRecursively()
 
@@ -149,10 +194,9 @@ object AuraWakeWordModelInstaller {
                 )
             }
 
-            Log.i(
-                TAG,
-                "Modelo español instalado y verificado."
-            )
+            reportProgress(onProgress, 100, "Modelo español instalado correctamente.")
+
+            Log.i(TAG, "Modelo español instalado y verificado.")
 
             return destination
 
@@ -167,7 +211,8 @@ object AuraWakeWordModelInstaller {
     }
 
     private fun downloadWithRetries(
-        destination: File
+        destination: File,
+        onProgress: (Int, String) -> Unit
     ) {
         var lastError: Exception? = null
 
@@ -175,7 +220,10 @@ object AuraWakeWordModelInstaller {
             destination.delete()
 
             try {
-                downloadModel(destination)
+                downloadModel(
+                    destination,
+                    onProgress
+                )
 
                 if (destination.length() < 10L * 1024L * 1024L) {
                     throw IllegalStateException(
@@ -197,6 +245,11 @@ object AuraWakeWordModelInstaller {
                 destination.delete()
 
                 if (attempt < 3) {
+                    reportProgress(
+                        onProgress,
+                        0,
+                        "Reintentando descarga ($attempt/3)…"
+                    )
                     Thread.sleep(attempt * 1500L)
                 }
             }
@@ -208,7 +261,10 @@ object AuraWakeWordModelInstaller {
         )
     }
 
-    private fun downloadModel(destination: File) {
+    private fun downloadModel(
+        destination: File,
+        onProgress: (Int, String) -> Unit
+    ) {
         val connection = URL(MODEL_URL)
             .openConnection() as HttpURLConnection
 
@@ -225,17 +281,13 @@ object AuraWakeWordModelInstaller {
         try {
             connection.connect()
 
-            if (
-                connection.responseCode !=
-                HttpURLConnection.HTTP_OK
-            ) {
+            if (connection.responseCode != HttpURLConnection.HTTP_OK) {
                 throw IllegalStateException(
                     "Error HTTP ${connection.responseCode}"
                 )
             }
 
-            val contentLength =
-                connection.contentLengthLong
+            val contentLength = connection.contentLengthLong
 
             if (contentLength > MAX_ARCHIVE_BYTES) {
                 throw IllegalStateException(
@@ -244,6 +296,7 @@ object AuraWakeWordModelInstaller {
             }
 
             var totalBytes = 0L
+            var lastReported = -1
 
             connection.inputStream.use { input ->
                 FileOutputStream(destination).use { output ->
@@ -252,7 +305,6 @@ object AuraWakeWordModelInstaller {
 
                     while (true) {
                         val count = input.read(buffer)
-
                         if (count == -1) break
 
                         totalBytes += count
@@ -264,6 +316,28 @@ object AuraWakeWordModelInstaller {
                         }
 
                         output.write(buffer, 0, count)
+
+                        if (contentLength > 0L) {
+                            val percent = (
+                                totalBytes * 75L / contentLength
+                            ).toInt().coerceIn(0, 75)
+
+                            if (percent != lastReported) {
+                                lastReported = percent
+
+                                reportProgress(
+                                    onProgress,
+                                    percent,
+                                    "Descargando modelo español…"
+                                )
+                            }
+                        } else {
+                            reportProgress(
+                                onProgress,
+                                10,
+                                "Descargando modelo español…"
+                            )
+                        }
                     }
 
                     output.flush()
@@ -290,9 +364,7 @@ object AuraWakeWordModelInstaller {
 
             while (true) {
                 val count = input.read(buffer)
-
                 if (count == -1) break
-
                 digest.update(buffer, 0, count)
             }
         }
@@ -318,10 +390,7 @@ object AuraWakeWordModelInstaller {
             var entry = zip.nextEntry
 
             while (entry != null) {
-
-                val entryName = entry.name
-                    .replace('\\', '/')
-
+                val entryName = entry.name.replace('\\', '/')
                 val separator = entryName.indexOf('/')
 
                 if (
@@ -349,30 +418,21 @@ object AuraWakeWordModelInstaller {
                             outputFile.parentFile?.mkdirs()
 
                             FileOutputStream(outputFile).use { output ->
-
                                 val buffer = ByteArray(16384)
 
                                 while (true) {
                                     val count = zip.read(buffer)
-
                                     if (count == -1) break
 
                                     extractedBytes += count
 
-                                    if (
-                                        extractedBytes >
-                                        MAX_EXTRACTED_BYTES
-                                    ) {
+                                    if (extractedBytes > MAX_EXTRACTED_BYTES) {
                                         throw IllegalStateException(
                                             "El modelo extraído supera el límite."
                                         )
                                     }
 
-                                    output.write(
-                                        buffer,
-                                        0,
-                                        count
-                                    )
+                                    output.write(buffer, 0, count)
                                 }
                             }
                         }
@@ -386,17 +446,18 @@ object AuraWakeWordModelInstaller {
     }
 
     private fun isValidModel(directory: File): Boolean {
-        return File(
-            directory,
-            "am/final.mdl"
-        ).isFile &&
-            File(
-                directory,
-                "conf/mfcc.conf"
-            ).isFile &&
-            File(
-                directory,
-                "graph/words.txt"
-            ).isFile
+        return File(directory, "am/final.mdl").isFile &&
+            File(directory, "conf/mfcc.conf").isFile &&
+            File(directory, "graph/words.txt").isFile
+    }
+
+    private fun reportProgress(
+        callback: (Int, String) -> Unit,
+        percent: Int,
+        message: String
+    ) {
+        mainHandler.post {
+            callback(percent, message)
+        }
     }
 }
