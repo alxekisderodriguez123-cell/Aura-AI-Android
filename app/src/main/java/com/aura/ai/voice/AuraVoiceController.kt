@@ -10,6 +10,7 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import com.aura.ai.assistant.AuraWakeWordController
 import java.util.Locale
 
 class AuraVoiceController(
@@ -43,7 +44,6 @@ class AuraVoiceController(
     }
 
     private fun initializeTextToSpeech() {
-
         textToSpeech = TextToSpeech(appContext) { status ->
 
             if (status == TextToSpeech.SUCCESS && !isReleased) {
@@ -90,6 +90,7 @@ class AuraVoiceController(
                             onMessageChanged(
                                 "Puedes seguir hablándome."
                             )
+
                             handler.postDelayed(
                                 restartListening,
                                 450L
@@ -108,6 +109,13 @@ class AuraVoiceController(
                         onMessageChanged(
                             "No se pudo reproducir la respuesta de voz."
                         )
+
+                        if (continuousMode) {
+                            handler.postDelayed(
+                                restartListening,
+                                700L
+                            )
+                        }
                     }
                 }
             }
@@ -117,6 +125,8 @@ class AuraVoiceController(
     private fun initializeSpeechRecognizer() {
 
         if (!SpeechRecognizer.isRecognitionAvailable(appContext)) {
+            recognizer = null
+
             onMessageChanged(
                 "Android no tiene un servicio de reconocimiento disponible."
             )
@@ -125,7 +135,7 @@ class AuraVoiceController(
 
         recognizer = try {
             SpeechRecognizer.createSpeechRecognizer(appContext)
-        } catch (e: Exception) {
+        } catch (error: Exception) {
             onMessageChanged(
                 "No se pudo iniciar el reconocimiento de voz."
             )
@@ -155,7 +165,9 @@ class AuraVoiceController(
                 override fun onEndOfSpeech() {
                     if (!isReleased && requestActive) {
                         onStateChanged(AuraVoiceState.PROCESSING)
-                        onMessageChanged("Entendiendo lo que dijiste...")
+                        onMessageChanged(
+                            "Entendiendo lo que dijiste..."
+                        )
                     }
                 }
 
@@ -165,20 +177,33 @@ class AuraVoiceController(
 
                     requestActive = false
 
+                    val serverDisconnected =
+                        error == SpeechRecognizer.ERROR_SERVER_DISCONNECTED
+
+                    val clientDisconnected =
+                        error == SpeechRecognizer.ERROR_CLIENT
+
+                    if (serverDisconnected || clientDisconnected) {
+                        resetSpeechRecognizer()
+                    }
+
                     if (
                         continuousMode &&
                         (
                             error == SpeechRecognizer.ERROR_NO_MATCH ||
-                            error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT
+                            error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT ||
+                            serverDisconnected ||
+                            clientDisconnected ||
+                            error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY
                         )
                     ) {
                         onMessageChanged(
-                            "No te escuché bien. Te sigo escuchando."
+                            "Restableciendo el reconocimiento de voz..."
                         )
 
                         handler.postDelayed(
                             restartListening,
-                            500L
+                            900L
                         )
                     } else {
                         onStateChanged(AuraVoiceState.IDLE)
@@ -202,10 +227,21 @@ class AuraVoiceController(
                         .orEmpty()
 
                     if (recognizedText.isBlank()) {
-                        onStateChanged(AuraVoiceState.IDLE)
-                        onMessageChanged(
-                            "No pude reconocer lo que dijiste."
-                        )
+                        if (continuousMode) {
+                            onMessageChanged(
+                                "No te escuché bien. Inténtalo otra vez."
+                            )
+
+                            handler.postDelayed(
+                                restartListening,
+                                500L
+                            )
+                        } else {
+                            onStateChanged(AuraVoiceState.IDLE)
+                            onMessageChanged(
+                                "No pude reconocer lo que dijiste."
+                            )
+                        }
                         return
                     }
 
@@ -213,8 +249,6 @@ class AuraVoiceController(
                     onStateChanged(AuraVoiceState.PROCESSING)
                     onMessageChanged("Aura está pensando...")
 
-                    // La respuesta se procesa en MainActivity.
-                    // Aquí no se pronuncia una confirmación falsa.
                     onFinalTranscript(recognizedText)
                 }
 
@@ -241,6 +275,26 @@ class AuraVoiceController(
         )
     }
 
+    /**
+     * Reconstruye SpeechRecognizer cuando Android desconecta
+     * el servicio de reconocimiento.
+     */
+    private fun resetSpeechRecognizer() {
+
+        val oldRecognizer = recognizer
+        recognizer = null
+
+        try {
+            oldRecognizer?.cancel()
+            oldRecognizer?.destroy()
+        } catch (_: Exception) {
+        }
+
+        if (!isReleased) {
+            initializeSpeechRecognizer()
+        }
+    }
+
     fun startConversation() {
         if (isReleased) return
 
@@ -259,13 +313,19 @@ class AuraVoiceController(
         startListeningInternal()
     }
 
+    /**
+     * No inicia Android SpeechRecognizer hasta que Vosk
+     * haya sido detenido y tenga tiempo para liberar AudioRecord.
+     */
     private fun startListeningInternal() {
 
         if (isReleased || requestActive) return
 
-        val speechRecognizer = recognizer
+        if (recognizer == null) {
+            resetSpeechRecognizer()
+        }
 
-        if (speechRecognizer == null) {
+        if (recognizer == null) {
             onStateChanged(AuraVoiceState.IDLE)
             onMessageChanged(
                 "El servicio de reconocimiento no está disponible."
@@ -274,10 +334,36 @@ class AuraVoiceController(
         }
 
         onTranscriptChanged("")
-        onMessageChanged("Conectando con el reconocimiento de voz...")
+        onMessageChanged(
+            "Preparando el micrófono..."
+        )
         onStateChanged(AuraVoiceState.LISTENING)
 
         requestActive = true
+
+        AuraWakeWordController.stopAndRunAfterRelease(
+            appContext
+        ) {
+            if (isReleased || !requestActive) return@stopAndRunAfterRelease
+
+            startRecognizerRequest()
+        }
+    }
+
+    private fun startRecognizerRequest() {
+
+        if (isReleased || !requestActive) return
+
+        val speechRecognizer = recognizer
+
+        if (speechRecognizer == null) {
+            requestActive = false
+            onStateChanged(AuraVoiceState.IDLE)
+            onMessageChanged(
+                "El reconocedor de voz no está disponible."
+            )
+            return
+        }
 
         val intent = Intent(
             RecognizerIntent.ACTION_RECOGNIZE_SPEECH
@@ -303,12 +389,23 @@ class AuraVoiceController(
         try {
             speechRecognizer.startListening(intent)
 
-        } catch (e: Exception) {
+        } catch (error: Exception) {
             requestActive = false
+
+            resetSpeechRecognizer()
+
             onStateChanged(AuraVoiceState.IDLE)
             onMessageChanged(
-                "No se pudo iniciar la escucha: ${e.message ?: "error desconocido"}"
+                "No se pudo iniciar la escucha: " +
+                    (error.message ?: "error desconocido")
             )
+
+            if (continuousMode) {
+                handler.postDelayed(
+                    restartListening,
+                    1000L
+                )
+            }
         }
     }
 
@@ -328,7 +425,10 @@ class AuraVoiceController(
             )
 
             if (continuousMode) {
-                handler.postDelayed(restartListening, 500L)
+                handler.postDelayed(
+                    restartListening,
+                    500L
+                )
             }
 
             return
@@ -346,6 +446,13 @@ class AuraVoiceController(
             onMessageChanged(
                 "El motor de voz rechazó la respuesta."
             )
+
+            if (continuousMode) {
+                handler.postDelayed(
+                    restartListening,
+                    700L
+                )
+            }
         }
     }
 
@@ -354,16 +461,20 @@ class AuraVoiceController(
         continuousMode = false
         handler.removeCallbacks(restartListening)
 
+        requestActive = false
+
         try {
             recognizer?.cancel()
             textToSpeech?.stop()
         } catch (_: Exception) {
         }
 
-        requestActive = false
-
         onStateChanged(AuraVoiceState.IDLE)
         onMessageChanged("Conversación por voz detenida")
+
+        AuraWakeWordController.restartAfterRelease(
+            appContext
+        )
     }
 
     fun stopListening() {
@@ -372,6 +483,7 @@ class AuraVoiceController(
 
     private fun errorMessage(error: Int): String =
         when (error) {
+
             SpeechRecognizer.ERROR_AUDIO ->
                 "Error al acceder al micrófono."
 
@@ -395,6 +507,9 @@ class AuraVoiceController(
 
             SpeechRecognizer.ERROR_SERVER ->
                 "El servidor de reconocimiento devolvió un error."
+
+            SpeechRecognizer.ERROR_SERVER_DISCONNECTED ->
+                "Android desconectó el servicio de reconocimiento. Se está restableciendo."
 
             SpeechRecognizer.ERROR_SPEECH_TIMEOUT ->
                 "No detecté voz."
@@ -432,5 +547,9 @@ class AuraVoiceController(
 
         textToSpeech = null
         isTtsReady = false
+
+        AuraWakeWordController.restartAfterRelease(
+            appContext
+        )
     }
 }
