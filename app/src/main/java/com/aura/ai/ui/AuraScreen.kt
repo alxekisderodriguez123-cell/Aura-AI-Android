@@ -1,5 +1,6 @@
 package com.aura.ai.ui
 
+import android.content.Intent
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -36,6 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.aura.ai.assistant.AuraVoiceSettingsActivity
 import com.aura.ai.chat.ChatMessage
 import com.aura.ai.media.AuraPlaybackController
 import com.aura.ai.voice.AuraVoiceState
@@ -43,7 +45,6 @@ import kotlinx.coroutines.delay
 
 private val AuraBackground = Color(0xFF101329)
 private val AuraPanel = Color(0xFF211D3D)
-private val AuraPanelLight = Color(0xFF30234F)
 private val AuraPurple = Color(0xFF9D55FF)
 private val AuraPink = Color(0xFFF04FAD)
 private val AuraCyan = Color(0xFF39DDF5)
@@ -114,6 +115,8 @@ private fun AuraVoiceScreen(
     onChatClick: () -> Unit,
     onRequestAssistantRole: () -> Unit
 ) {
+    val context = LocalContext.current
+
     val accent = when (voiceState) {
         AuraVoiceState.IDLE -> AuraPurple
         AuraVoiceState.LISTENING -> AuraCyan
@@ -150,7 +153,6 @@ private fun AuraVoiceScreen(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
-                // Encabezado
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -191,6 +193,7 @@ private fun AuraVoiceScreen(
                             tint = AuraCyan,
                             size = 19.dp
                         )
+
                         Text(
                             "CHAT",
                             color = AuraWhite,
@@ -201,7 +204,6 @@ private fun AuraVoiceScreen(
                     }
                 }
 
-                // Esfera y estado
                 Column(
                     modifier = Modifier
                         .weight(1f)
@@ -266,12 +268,10 @@ private fun AuraVoiceScreen(
                     )
                 }
 
-                // Reproductor compacto
                 AuraPlayerPanel(playback)
 
                 Spacer(Modifier.height(9.dp))
 
-                // Estado del asistente del sistema
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -332,7 +332,6 @@ private fun AuraVoiceScreen(
 
                 Spacer(Modifier.height(9.dp))
 
-                // Controles principales
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -367,8 +366,15 @@ private fun AuraVoiceScreen(
 
                     HomeAction(
                         icon = AuraIconType.SETTINGS,
-                        label = "Asistente",
-                        onClick = onRequestAssistantRole
+                        label = "Voz",
+                        onClick = {
+                            context.startActivity(
+                                Intent(
+                                    context,
+                                    AuraVoiceSettingsActivity::class.java
+                                )
+                            )
+                        }
                     )
                 }
             }
