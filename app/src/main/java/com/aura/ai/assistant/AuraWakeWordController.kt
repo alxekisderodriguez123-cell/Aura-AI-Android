@@ -1,6 +1,6 @@
 package com.aura.ai.assistant
 
-import android.Manifest
+import Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -9,20 +9,32 @@ import androidx.core.content.ContextCompat
 
 object AuraWakeWordController {
 
-    fun start(context: Context) {
+    fun start(context: Context): Boolean {
         val appContext = context.applicationContext
 
         if (!AuraWakeWordPreferences.isEnabled(appContext)) {
-            return
+            return false
         }
 
         if (
             ContextCompat.checkSelfPermission(
                 appContext,
-                Manifest.permission.RECORD_AUDIO
+                android.Manifest.permission.RECORD_AUDIO
             ) != PackageManager.PERMISSION_GRANTED
         ) {
-            return
+            android.util.Log.w(
+                "AuraWakeWord",
+                "No hay permiso de micrófono."
+            )
+            return false
+        }
+
+        if (!AuraWakeWordModelInstaller.isModelInstalled(appContext)) {
+            android.util.Log.w(
+                "AuraWakeWord",
+                "El modelo español todavía no está instalado."
+            )
+            return false
         }
 
         val intent = Intent(
@@ -30,7 +42,7 @@ object AuraWakeWordController {
             AuraWakeWordService::class.java
         )
 
-        try {
+        return try {
             if (Build.VERSION.SDK_INT >= 26) {
                 ContextCompat.startForegroundService(
                     appContext,
@@ -39,12 +51,16 @@ object AuraWakeWordController {
             } else {
                 appContext.startService(intent)
             }
+
+            true
+
         } catch (error: Exception) {
             android.util.Log.e(
                 "AuraWakeWord",
-                "No se pudo iniciar la escucha",
+                "No se pudo iniciar la escucha.",
                 error
             )
+            false
         }
     }
 
