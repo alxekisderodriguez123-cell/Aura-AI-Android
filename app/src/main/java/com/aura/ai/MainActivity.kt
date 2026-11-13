@@ -17,6 +17,7 @@ import androidx.core.content.ContextCompat
 import com.aura.ai.actions.AuraActionEngine
 import com.aura.ai.actions.AuraCommand
 import com.aura.ai.actions.AuraCommandParser
+import com.aura.ai.actions.AuraContactCommandParser
 import com.aura.ai.chat.AuraChatDatabase
 import com.aura.ai.chat.ChatMessage
 import com.aura.ai.ui.AuraScreen
@@ -124,6 +125,37 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+    private val contactsAndCallsPermission =
+        registerForActivityResult(
+            ActivityResultContracts.RequestMultiplePermissions()
+        ) { results ->
+
+            val contactsGranted =
+                results[Manifest.permission.READ_CONTACTS] == true ||
+                    ContextCompat.checkSelfPermission(
+                        this,
+                        Manifest.permission.READ_CONTACTS
+                    ) == PackageManager.PERMISSION_GRANTED
+
+            val callsGranted =
+                results[Manifest.permission.CALL_PHONE] == true ||
+                    ContextCompat.checkSelfPermission(
+                        this,
+                        Manifest.permission.CALL_PHONE
+                    ) == PackageManager.PERMISSION_GRANTED
+
+            voiceMessage = when {
+                contactsGranted && callsGranted ->
+                    "Permisos de Contactos y Llamadas concedidos."
+
+                !contactsGranted ->
+                    "Necesito permiso de Contactos para localizar personas."
+
+                else ->
+                    "Necesito permiso de Teléfono para realizar llamadas directas."
+            }
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -187,11 +219,45 @@ class MainActivity : ComponentActivity() {
             )
         }
 
+        // Solicitar permisos de contactos y llamadas
+        // al abrir Aura normalmente.
+        if (!shouldStartListening(intent)) {
+            window.decorView.post {
+                requestContactsAndCallsPermissions()
+            }
+        }
+
         if (shouldStartListening(intent)) {
             window.decorView.post {
                 requestMicrophone(continuous = true)
             }
         }
+    }
+
+    private fun requestContactsAndCallsPermissions() {
+
+        val contactsGranted =
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.READ_CONTACTS
+            ) == PackageManager.PERMISSION_GRANTED
+
+        val callsGranted =
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.CALL_PHONE
+            ) == PackageManager.PERMISSION_GRANTED
+
+        if (contactsGranted && callsGranted) {
+            return
+        }
+
+        contactsAndCallsPermission.launch(
+            arrayOf(
+                Manifest.permission.READ_CONTACTS,
+                Manifest.permission.CALL_PHONE
+            )
+        )
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -279,7 +345,22 @@ class MainActivity : ComponentActivity() {
 
         chatMessages.add(savedUserMessage)
 
-        val command = AuraCommandParser.parse(text)
+        // Si Aura está esperando el contenido de un WhatsApp,
+        // la siguiente frase se interpreta como el mensaje.
+        if (actionEngine.hasPendingWhatsAppMessage()) {
+
+            val result =
+                actionEngine.completePendingWhatsAppMessage(text)
+
+            finishResponse(result, speakResponse)
+            return
+        }
+
+        // Primero se comprueban las órdenes de contactos.
+        // Después se procesa el parser general de Aura.
+        val command =
+            AuraContactCommandParser.parse(text)
+                ?: AuraCommandParser.parse(text)
 
         if (command != null) {
 
