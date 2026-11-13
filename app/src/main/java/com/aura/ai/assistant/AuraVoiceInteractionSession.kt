@@ -4,8 +4,6 @@ import android.content.Context
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.service.voice.VoiceInteractionSession
 import android.view.Gravity
 import android.view.View
@@ -17,7 +15,6 @@ class AuraVoiceInteractionSession(
 ) : VoiceInteractionSession(context) {
 
     private val appContext = context.applicationContext
-    private val mainHandler = Handler(Looper.getMainLooper())
 
     private var overlay: AuraVoiceOverlayView? = null
     private var runtime: AuraVoiceRuntime? = null
@@ -71,7 +68,8 @@ class AuraVoiceInteractionSession(
     ) {
         super.onShow(args, showFlags)
 
-        mainHandler.removeCallbacks(restartWakeWordRunnable)
+        // Vosk se detiene antes de que el controlador
+        // solicite el micrófono para escuchar la orden.
         AuraWakeWordController.stop(appContext)
 
         overlay?.visibility = View.VISIBLE
@@ -98,10 +96,13 @@ class AuraVoiceInteractionSession(
             )
         }
 
+        // AuraVoiceController espera a que el micrófono
+        // quede libre antes de iniciar el reconocimiento.
         runtime?.startConversation()
     }
 
     override fun onHide() {
+
         runtime?.stopConversation()
 
         overlay?.setSpeaking(false)
@@ -109,27 +110,9 @@ class AuraVoiceInteractionSession(
         overlay?.stopOrbAnimation()
 
         super.onHide()
-
-        if (AuraWakeWordPreferences.isEnabled(appContext)) {
-            mainHandler.removeCallbacks(restartWakeWordRunnable)
-
-            mainHandler.postDelayed(
-                restartWakeWordRunnable,
-                700L
-            )
-        }
-    }
-
-    private val restartWakeWordRunnable = Runnable {
-        if (
-            AuraWakeWordPreferences.isEnabled(appContext)
-        ) {
-            AuraWakeWordController.start(appContext)
-        }
     }
 
     override fun onDestroy() {
-        mainHandler.removeCallbacks(restartWakeWordRunnable)
 
         runtime?.release()
         runtime = null
