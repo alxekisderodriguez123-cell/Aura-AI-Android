@@ -69,6 +69,11 @@
         </activity>
 
         <activity
+            android:name=".assistant.AuraVoiceSettingsActivity"
+            android:exported="false"
+            android:label="Configuración de voz" />
+
+        <activity
             android:name=".assistant.AuraAssistActivity"
             android:exported="true"
             android:excludeFromRecents="true"
@@ -79,7 +84,6 @@
                 <action android:name="android.intent.action.ASSIST" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
-
         </activity>
 
         <service
