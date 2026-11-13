@@ -1,6 +1,8 @@
+
 package com.aura.ai.actions
 
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -36,7 +38,7 @@ class AuraContactsActions(
     fun findContact(name: String): Contact? {
         if (!hasPermission(Manifest.permission.READ_CONTACTS)) {
             throw SecurityException(
-                "Necesito permiso para consultar tus contactos. Abre Aura y concede el permiso de Contactos."
+                "Necesito permiso de Contactos para buscar a esa persona."
             )
         }
 
@@ -63,12 +65,16 @@ class AuraContactsActions(
                 ContactsContract.CommonDataKinds.Phone.NUMBER
             )
 
-            while (cursor.moveToNext()) {
-                val contactName = cursor.getString(nameIndex)
-                    ?: continue
+            if (nameIndex < 0 || numberIndex < 0) {
+                return@use
+            }
 
-                val number = cursor.getString(numberIndex)
-                    ?: continue
+            while (cursor.moveToNext()) {
+                val contactName =
+                    cursor.getString(nameIndex) ?: continue
+
+                val number =
+                    cursor.getString(numberIndex) ?: continue
 
                 contacts.add(
                     Contact(
@@ -81,13 +87,36 @@ class AuraContactsActions(
 
         val query = normalize(name)
 
-        return contacts.firstOrNull {
+        if (query.isBlank()) return null
+
+        // Coincidencia exacta.
+        contacts.firstOrNull {
             normalize(it.name) == query
-        } ?: contacts.firstOrNull {
+        }?.let { return it }
+
+        // Coincidencia por inicio del nombre.
+        contacts.firstOrNull {
             normalize(it.name).startsWith(query)
-        } ?: contacts.firstOrNull {
+        }?.let { return it }
+
+        // Coincidencia parcial.
+        return contacts.firstOrNull {
             normalize(it.name).contains(query)
         }
+    }
+
+    fun describeContact(name: String): String {
+        val contact = findContact(name)
+            ?: return "No encontré a $name en tus contactos."
+
+        return "Encontré a ${contact.name} en tus contactos."
+    }
+
+    fun getContactNumber(name: String): String {
+        val contact = findContact(name)
+            ?: return "No encontré a $name en tus contactos."
+
+        return "El número de ${contact.name} es ${contact.number}."
     }
 
     fun callContact(name: String): String {
@@ -96,7 +125,7 @@ class AuraContactsActions(
 
         if (!hasPermission(Manifest.permission.CALL_PHONE)) {
             throw SecurityException(
-                "Necesito permiso para realizar llamadas. Abre Aura y concede el permiso de Teléfono."
+                "Necesito permiso de Teléfono para realizar llamadas."
             )
         }
 
@@ -114,6 +143,7 @@ class AuraContactsActions(
         number: String,
         message: String
     ): String {
+
         if (message.isBlank()) {
             return "No recibí el mensaje que quieres enviar."
         }
@@ -127,38 +157,70 @@ class AuraContactsActions(
         }
 
         if (!internationalNumber.startsWith("+")) {
-            return "El número de ese contacto no tiene código internacional. Añádelo en Contactos para poder abrir WhatsApp correctamente."
+            return "El número no tiene código internacional. Añádelo en Contactos para preparar el WhatsApp."
         }
 
         val digits = internationalNumber.removePrefix("+")
 
         if (digits.length !in 8..15) {
-            return "El número del contacto no parece válido para WhatsApp."
+            return "El número de ese contacto no parece válido para WhatsApp."
         }
 
-        val uri = Uri.parse(
-            "https://wa.me/$digits?text=${Uri.encode(message)}"
+        val encodedMessage = Uri.encode(message)
+
+        // Primero intentamos abrir WhatsApp directamente.
+        val whatsappUri = Uri.parse(
+            "whatsapp://send?phone=$digits&text=$encodedMessage"
         )
 
-        val whatsappIntent = Intent(
-            Intent.ACTION_VIEW,
-            uri
+        val whatsappPackages = listOf(
+            "com.whatsapp",
+            "com.whatsapp.w4b"
         )
-            .setPackage("com.whatsapp")
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+        for (packageName in whatsappPackages) {
+            try {
+                val intent = Intent(
+                    Intent.ACTION_VIEW,
+                    whatsappUri
+                )
+                    .setPackage(packageName)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+                context.startActivity(intent)
+
+                return "Abrí WhatsApp con el mensaje preparado para ${"el contacto"}. Revísalo y pulsa Enviar cuando quieras."
+
+            } catch (_: ActivityNotFoundException) {
+                // Probamos la siguiente variante.
+            } catch (_: Exception) {
+                // Probamos la siguiente variante.
+            }
+        }
+
+        // Alternativa: enlace oficial de WhatsApp.
+        val webUri = Uri.parse(
+            "https://wa.me/$digits?text=$encodedMessage"
+        )
 
         return try {
-            context.startActivity(whatsappIntent)
-            "Abrí WhatsApp con el mensaje preparado. Revísalo y pulsa Enviar cuando quieras."
-        } catch (_: Exception) {
-            val browserIntent = Intent(
+            val intent = Intent(
                 Intent.ACTION_VIEW,
-                uri
+                webUri
             ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
-            context.startActivity(browserIntent)
+            context.startActivity(intent)
 
-            "No encontré WhatsApp instalado. Abrí el enlace para continuar."
+            "Abrí el enlace de WhatsApp con el mensaje preparado. Revísalo y pulsa Enviar cuando quieras."
+
+        } catch (error: Exception) {
+            android.util.Log.e(
+                "AuraContacts",
+                "No se pudo abrir WhatsApp",
+                error
+            )
+
+            "No pude abrir WhatsApp ni su enlace web. Comprueba que tengas conexión y que la aplicación esté instalada."
         }
     }
 }
