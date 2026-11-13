@@ -1,4 +1,3 @@
-
 package com.aura.ai.assistant
 
 import android.app.Service
@@ -24,7 +23,8 @@ class AuraWakeWordService : Service(), RecognitionListener {
             """["hey aura", "ey aura", "oye aura", "hola aura"]"""
     }
 
-    private val mainHandler = Handler(Looper.getMainLooper())
+    private val mainHandler =
+        Handler(Looper.getMainLooper())
 
     private var model: Model? = null
     private var recognizer: Recognizer? = null
@@ -33,8 +33,12 @@ class AuraWakeWordService : Service(), RecognitionListener {
     private var triggered = false
     private var loading = false
     private var destroyed = false
+
     private var retryAttempt = 0
+    private var modelRetryAttempt = 0
+
     private var restartPending = false
+    private var modelRetryPending = false
 
     private val restartRunnable = Runnable {
         restartPending = false
@@ -42,6 +46,14 @@ class AuraWakeWordService : Service(), RecognitionListener {
         if (!triggered && !destroyed) {
             stopRecognition()
             startRecognition()
+        }
+    }
+
+    private val modelRetryRunnable = Runnable {
+        modelRetryPending = false
+
+        if (!destroyed && model == null) {
+            loadModel()
         }
     }
 
@@ -75,6 +87,8 @@ class AuraWakeWordService : Service(), RecognitionListener {
 
         loading = true
 
+        Log.i(TAG, "Comprobando modelo español de Vosk")
+
         AuraWakeWordModelInstaller.ensureModel(this) { directory ->
 
             loading = false
@@ -82,21 +96,66 @@ class AuraWakeWordService : Service(), RecognitionListener {
             if (destroyed) return@ensureModel
 
             if (directory == null) {
-                Log.e(TAG, "No se pudo instalar el modelo español")
-                stopSelf()
+                Log.e(
+                    TAG,
+                    "No se pudo instalar el modelo. Se programará otro intento."
+                )
+
+                scheduleModelRetry()
                 return@ensureModel
             }
 
             try {
                 model = Model(directory.absolutePath)
-                retryAttempt = 0
+
+                modelRetryAttempt = 0
+
+                Log.i(
+                    TAG,
+                    "Modelo Vosk cargado correctamente"
+                )
+
                 startRecognition()
 
             } catch (error: Exception) {
-                Log.e(TAG, "Error cargando Vosk", error)
-                stopSelf()
+                Log.e(
+                    TAG,
+                    "Error cargando el modelo Vosk",
+                    error
+                )
+
+                try {
+                    model?.close()
+                } catch (_: Exception) {
+                }
+
+                model = null
+                scheduleModelRetry()
             }
         }
+    }
+
+    private fun scheduleModelRetry() {
+        if (destroyed || modelRetryPending) return
+
+        modelRetryPending = true
+
+        modelRetryAttempt =
+            (modelRetryAttempt + 1).coerceAtMost(6)
+
+        val delay = (
+            5000L * (1 shl (modelRetryAttempt - 1))
+        ).coerceAtMost(300000L)
+
+        Log.w(
+            TAG,
+            "Nuevo intento de instalación en ${delay}ms"
+        )
+
+        mainHandler.postDelayed(
+            modelRetryRunnable,
+            delay
+        )
     }
 
     private fun startRecognition() {
@@ -105,11 +164,24 @@ class AuraWakeWordService : Service(), RecognitionListener {
         val currentModel = model ?: return
 
         try {
-            val newRecognizer = Recognizer(
-                currentModel,
-                SAMPLE_RATE,
-                GRAMMAR
-            )
+            val newRecognizer = try {
+                Recognizer(
+                    currentModel,
+                    SAMPLE_RATE,
+                    GRAMMAR
+                )
+            } catch (grammarError: Exception) {
+                Log.w(
+                    TAG,
+                    "No se pudo aplicar la gramática restringida. Usando reconocimiento general.",
+                    grammarError
+                )
+
+                Recognizer(
+                    currentModel,
+                    SAMPLE_RATE
+                )
+            }
 
             recognizer = newRecognizer
 
@@ -120,7 +192,8 @@ class AuraWakeWordService : Service(), RecognitionListener {
 
             speechService = newSpeechService
 
-            val started = newSpeechService.startListening(this)
+            val started =
+                newSpeechService.startListening(this)
 
             if (!started) {
                 throw IllegalStateException(
@@ -130,10 +203,17 @@ class AuraWakeWordService : Service(), RecognitionListener {
 
             retryAttempt = 0
 
-            Log.i(TAG, "Detector de Aura iniciado")
+            Log.i(
+                TAG,
+                "Detector de Aura iniciado"
+            )
 
         } catch (error: Exception) {
-            Log.e(TAG, "No se pudo iniciar el reconocimiento", error)
+            Log.e(
+                TAG,
+                "No se pudo iniciar el reconocimiento",
+                error
+            )
 
             stopRecognition()
             scheduleRecognitionRestart()
@@ -145,14 +225,16 @@ class AuraWakeWordService : Service(), RecognitionListener {
 
         restartPending = true
 
-        retryAttempt = (retryAttempt + 1).coerceAtMost(5)
+        retryAttempt =
+            (retryAttempt + 1).coerceAtMost(5)
 
-        val delay = (1_000L * (1 shl retryAttempt))
-            .coerceAtMost(30_000L)
+        val delay = (
+            1000L * (1 shl retryAttempt)
+        ).coerceAtMost(30000L)
 
         Log.w(
             TAG,
-            "Reintentando reconocimiento en ${delay}ms"
+            "Reiniciando reconocimiento en ${delay}ms"
         )
 
         mainHandler.postDelayed(
@@ -183,10 +265,16 @@ class AuraWakeWordService : Service(), RecognitionListener {
         try {
             val json = JSONObject(hypothesis)
 
-            val recognized = json.optString(
-                "partial",
-                json.optString("text", "")
-            )
+            val partial = json.optString("partial")
+            val finalText = json.optString("text")
+
+            val recognized = if (partial.isNotBlank()) {
+                partial
+            } else {
+                finalText
+            }
+
+            if (recognized.isBlank()) return
 
             val normalized = normalize(recognized)
 
@@ -202,7 +290,11 @@ class AuraWakeWordService : Service(), RecognitionListener {
             }
 
         } catch (error: Exception) {
-            Log.w(TAG, "Resultado de voz no válido", error)
+            Log.w(
+                TAG,
+                "Resultado de voz no válido",
+                error
+            )
         }
     }
 
@@ -222,23 +314,30 @@ class AuraWakeWordService : Service(), RecognitionListener {
 
         triggered = true
 
-        Log.i(TAG, "Palabra de activación detectada")
+        Log.i(
+            TAG,
+            "Frase de activación detectada"
+        )
 
         mainHandler.removeCallbacks(restartRunnable)
         restartPending = false
 
         stopRecognition()
 
-        val shown = AuraVoiceInteractionService.showAura()
+        val shown =
+            AuraVoiceInteractionService.showAura()
 
-        if (!shown) {
+        if (shown) {
+            stopSelf()
+        } else {
             Log.e(
                 TAG,
-                "El servicio de interacción de voz no está disponible."
+                "No se pudo mostrar Aura. Se reintentará la escucha."
             )
-        }
 
-        stopSelf()
+            triggered = false
+            scheduleRecognitionRestart()
+        }
     }
 
     private fun stopRecognition() {
@@ -248,13 +347,21 @@ class AuraWakeWordService : Service(), RecognitionListener {
         try {
             currentSpeechService?.cancel()
         } catch (error: Exception) {
-            Log.w(TAG, "Error cancelando el reconocimiento", error)
+            Log.w(
+                TAG,
+                "Error cancelando reconocimiento",
+                error
+            )
         }
 
         try {
             currentSpeechService?.shutdown()
         } catch (error: Exception) {
-            Log.w(TAG, "Error liberando el micrófono", error)
+            Log.w(
+                TAG,
+                "Error liberando servicio de voz",
+                error
+            )
         }
 
         val currentRecognizer = recognizer
@@ -263,12 +370,20 @@ class AuraWakeWordService : Service(), RecognitionListener {
         try {
             currentRecognizer?.close()
         } catch (error: Exception) {
-            Log.w(TAG, "Error cerrando el reconocedor", error)
+            Log.w(
+                TAG,
+                "Error cerrando reconocedor",
+                error
+            )
         }
     }
 
     override fun onError(exception: Exception?) {
-        Log.e(TAG, "Error de reconocimiento", exception)
+        Log.e(
+            TAG,
+            "Error de reconocimiento",
+            exception
+        )
 
         if (!triggered && !destroyed) {
             scheduleRecognitionRestart()
@@ -277,7 +392,11 @@ class AuraWakeWordService : Service(), RecognitionListener {
 
     override fun onTimeout() {
         if (!triggered && !destroyed) {
-            Log.d(TAG, "Tiempo de reconocimiento agotado")
+            Log.d(
+                TAG,
+                "Tiempo de reconocimiento agotado"
+            )
+
             scheduleRecognitionRestart()
         }
     }
@@ -288,14 +407,21 @@ class AuraWakeWordService : Service(), RecognitionListener {
         destroyed = true
 
         mainHandler.removeCallbacks(restartRunnable)
+        mainHandler.removeCallbacks(modelRetryRunnable)
+
         restartPending = false
+        modelRetryPending = false
 
         stopRecognition()
 
         try {
             model?.close()
         } catch (error: Exception) {
-            Log.w(TAG, "Error cerrando el modelo", error)
+            Log.w(
+                TAG,
+                "Error cerrando el modelo",
+                error
+            )
         }
 
         model = null
